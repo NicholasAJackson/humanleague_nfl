@@ -1,6 +1,7 @@
 import { getSql, rateLimit, clientIp, readJsonBody, send } from './_db.js';
 import { assertSiteAuth } from './_auth.js';
 import { isUndefinedRelation } from './_pgErrors.js';
+import { areRuleChangesClosed, RULE_CHANGES_CLOSED_ERROR } from './_ruleChangesWindow.js';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -75,6 +76,10 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      if (areRuleChangesClosed()) {
+        return send(res, 403, { error: RULE_CHANGES_CLOSED_ERROR });
+      }
+
       const ip = clientIp(req);
       if (!rateLimit(`rule-posts:${ip}`, { max: 24, windowMs: 60_000 })) {
         return send(res, 429, { error: 'Too many requests, slow down a sec.' });

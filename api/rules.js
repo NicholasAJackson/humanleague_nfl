@@ -1,6 +1,7 @@
 import { getSql, rateLimit, clientIp, readJsonBody, send } from './_db.js';
 import { assertSiteAuth, getSessionPayload } from './_auth.js';
 import { isUndefinedRelation } from './_pgErrors.js';
+import { areRuleChangesClosed, RULE_CHANGES_CLOSED_ERROR } from './_ruleChangesWindow.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -79,6 +80,10 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      if (areRuleChangesClosed()) {
+        return send(res, 403, { error: RULE_CHANGES_CLOSED_ERROR });
+      }
+
       // Suggesting a rule now requires a member account so the author is
       // attributed to a real manager (no more free-text names).
       const session = getSessionPayload(req);

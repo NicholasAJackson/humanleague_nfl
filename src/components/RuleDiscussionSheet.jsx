@@ -3,7 +3,7 @@ import BottomSheet from './BottomSheet.jsx';
 import { getVoterToken } from '../lib/voter.js';
 import './RuleDiscussionSheet.css';
 
-export default function RuleDiscussionSheet({ rule, onClose, onPostCount }) {
+export default function RuleDiscussionSheet({ rule, onClose, onPostCount, readOnly = false }) {
   const onPostCountRef = useRef(onPostCount);
   onPostCountRef.current = onPostCount;
 
@@ -53,6 +53,7 @@ export default function RuleDiscussionSheet({ rule, onClose, onPostCount }) {
 
   async function sendPost(e) {
     e.preventDefault();
+    if (readOnly) return;
     const text = body.trim();
     if (text.length < 1) return;
     setSending(true);
@@ -119,7 +120,9 @@ export default function RuleDiscussionSheet({ rule, onClose, onPostCount }) {
   return (
     <BottomSheet open={true} title={title} onClose={onClose}>
       <p className="muted rule-discuss-lead" style={{ marginTop: 0 }}>
-        Thread for this rule suggestion. Oldest first.
+        {readOnly
+          ? 'Read-only — the window for rule changes has closed.'
+          : 'Thread for this rule suggestion. Oldest first.'}
       </p>
 
       {loading && <p className="muted">Loading…</p>}
@@ -145,7 +148,7 @@ export default function RuleDiscussionSheet({ rule, onClose, onPostCount }) {
             <div className="rule-thread-meta">
               <span className="dim">{formatWhen(p.created_at)}</span>
               {p.author ? <span className="rule-thread-author">{p.author}</span> : <span className="dim">Anon</span>}
-              {(p.mine === true || p.mine === 't') && (
+              {!readOnly && (p.mine === true || p.mine === 't') && (
                 <button type="button" className="btn btn-ghost rule-thread-del" onClick={() => removePost(p)}>
                   Delete
                 </button>
@@ -156,6 +159,7 @@ export default function RuleDiscussionSheet({ rule, onClose, onPostCount }) {
         ))}
       </ul>
 
+      {!readOnly && (
       <form className="rule-discuss-compose" onSubmit={sendPost} aria-disabled={Boolean(notice)}>
         <label>
           <span className="dim">Message</span>
@@ -187,6 +191,7 @@ export default function RuleDiscussionSheet({ rule, onClose, onPostCount }) {
           {sending ? 'Sending…' : 'Post message'}
         </button>
       </form>
+      )}
     </BottomSheet>
   );
 }

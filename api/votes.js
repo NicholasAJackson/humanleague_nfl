@@ -1,5 +1,6 @@
 import { getSql, rateLimit, clientIp, readJsonBody, send } from './_db.js';
 import { assertSiteAuth, getSessionPayload } from './_auth.js';
+import { areRuleChangesClosed, RULE_CHANGES_CLOSED_ERROR } from './_ruleChangesWindow.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,6 +19,10 @@ export default async function handler(req, res) {
     const sub = session && typeof session.sub === 'string' ? session.sub : null;
     if (!sub || !UUID_RE.test(sub)) {
       return send(res, 401, { error: 'Sign in with your manager account to vote.' });
+    }
+
+    if (areRuleChangesClosed()) {
+      return send(res, 403, { error: RULE_CHANGES_CLOSED_ERROR });
     }
 
     const ip = clientIp(req);

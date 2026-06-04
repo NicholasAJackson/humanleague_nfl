@@ -4,9 +4,11 @@ import { assertSiteAuth, getSessionPayload } from './_auth.js';
 const USER_ID_RE = /^[0-9a-z]{8,40}$/i;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Same instant semantics as client `VITE_KEEPERS_REVEAL_AT`; set `KEEPERS_REVEAL_AT` on the server for filtered GETs. */
+/** Same instant as client `DEFAULT_KEEPERS_REVEAL_AT` / `VITE_KEEPERS_REVEAL_AT`; override with `KEEPERS_REVEAL_AT`. */
+const DEFAULT_KEEPERS_REVEAL_AT = '2026-08-01T12:00:00Z';
+
 function keeperRevealPending() {
-  const raw = (process.env.KEEPERS_REVEAL_AT || '').trim();
+  const raw = (process.env.KEEPERS_REVEAL_AT || DEFAULT_KEEPERS_REVEAL_AT).trim();
   if (!raw) return false;
   const t = Date.parse(raw);
   return Number.isFinite(t) && Date.now() < t;

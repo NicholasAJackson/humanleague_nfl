@@ -1,14 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import RuleCard from '../components/RuleCard.jsx';
 import BottomSheet from '../components/BottomSheet.jsx';
 import RuleDiscussionSheet from '../components/RuleDiscussionSheet.jsx';
 import { useAuth } from '../AuthContext.jsx';
+import { areRuleChangesClosed } from '../config.js';
+import './Rules.css';
 
 export default function Rules() {
+  const navigate = useNavigate();
   const auth = useAuth();
   // Voting now requires a real member account (not just the shared site
   // password). Dev-bypass falls back to read-only.
   const canVote = Boolean(auth?.user?.username);
+  const changesClosed = areRuleChangesClosed();
 
   const [rules, setRules] = useState(null);
   const [error, setError] = useState(null);
@@ -48,6 +53,7 @@ export default function Rules() {
   }, []);
 
   async function submitRule({ title, description }) {
+    if (changesClosed) return;
     setSubmitting(true);
     try {
       const res = await fetch('/api/rules', {
@@ -68,7 +74,7 @@ export default function Rules() {
   }
 
   async function vote(ruleId, value) {
-    if (busyRule) return;
+    if (busyRule || changesClosed) return;
     if (!canVote) {
       alert('Sign in with your manager account to vote.');
       return;
@@ -150,12 +156,40 @@ export default function Rules() {
     : null;
 
   return (
-    <div className="page">
+    <div className="page rules-page">
+      {changesClosed && (
+        <div
+          className="rules-closed-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rules-closed-title"
+        >
+          <button
+            type="button"
+            className="rules-closed-overlay__back"
+            onClick={() => navigate(-1)}
+            aria-label="Go back"
+          >
+            ← Back
+          </button>
+          <div className="rules-closed-overlay__panel">
+            <h2 id="rules-closed-title" className="rules-closed-overlay__title">
+              Rule changes closed
+            </h2>
+            <p className="rules-closed-overlay__body">
+              The window for rule changes has now closed.
+            </p>
+          </div>
+        </div>
+      )}
+
       <header className="page-header">
         <span className="eyebrow">Vote on next season</span>
         <h1>Rule suggestions</h1>
         <p className="muted">
-          Suggest a rule and vote on what should change.
+          {changesClosed
+            ? 'Review what was suggested — voting and new suggestions are closed.'
+            : 'Suggest a rule and vote on what should change.'}
         </p>
         {!canVote && auth?.ready && (
           <p className="dim" style={{ marginTop: 4 }}>
@@ -168,8 +202,14 @@ export default function Rules() {
         <button
           className="btn btn-primary"
           onClick={() => setShowSheet(true)}
-          disabled={!canVote}
-          title={canVote ? '' : 'Sign in with your manager account to suggest a rule'}
+          disabled={!canVote || changesClosed}
+          title={
+            changesClosed
+              ? 'The window for rule changes has closed'
+              : canVote
+                ? ''
+                : 'Sign in with your manager account to suggest a rule'
+          }
         >
           Suggest a rule
         </button>
@@ -207,10 +247,10 @@ export default function Rules() {
               key={rule.id}
               rule={rule}
               myVote={myVotes[rule.id] || 0}
-              busy={busyRule === rule.id || !canVote}
+              busy={busyRule === rule.id || !canVote || changesClosed}
               onVote={vote}
               postCount={rule.post_count ?? 0}
-              onDiscuss={setDiscussionRule}
+              onDiscuss={changesClosed ? undefined : setDiscussionRule}
             />
           ))}
         </div>
@@ -234,6 +274,7 @@ export default function Rules() {
           rule={discussionRule}
           onClose={() => setDiscussionRule(null)}
           onPostCount={syncPostCount}
+          readOnly={changesClosed}
         />
       ) : null}
     </div>
