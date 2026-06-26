@@ -20,6 +20,25 @@ const VIEW_OPTIONS = [
 /** League uses 1 QB + flex — no kickers in filters or UX. */
 const POSITION_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DST'];
 
+function exportCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? '' : String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+  const lines = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))];
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function formatScrapeDate(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -312,6 +331,49 @@ export default function Rankings() {
     return rows;
   }, [keeperFiltered, keeperSort]);
 
+  const handleExportRedraft = () => {
+    const headers = ['Rank', 'Player', 'Pos', 'Team', 'Bye', 'SD', 'Best', 'Worst', 'Owned%'];
+    const rows = redraftSorted.map((p) => [
+      p.ecr ?? '',
+      p.name ?? '',
+      p.pos ?? '',
+      p.team ?? '',
+      p.bye ?? '',
+      p.sd != null && Number.isFinite(Number(p.sd)) ? Number(p.sd).toFixed(1) : '',
+      p.best ?? '',
+      p.worst ?? '',
+      p.owned_avg != null ? Math.round(p.owned_avg) : '',
+    ]);
+    exportCsv('redraft-rankings.csv', headers, rows);
+  };
+
+  const handleExportKeeper = () => {
+    const season = keeper.season || '';
+    const headers = [
+      `Pick ${season}`,
+      'Player',
+      'Pos',
+      'Team',
+      'RD Cost',
+      'RD ECR',
+      'ECR',
+      'Delta',
+      'Manager',
+    ];
+    const rows = keeperSorted.map((p) => [
+      p.draft_pick_overall ?? '',
+      p.name ?? '',
+      p.pos ?? '',
+      p.team ?? '',
+      p.round_lost ?? '',
+      p.ecr_implied_round ?? '',
+      p.ecr ?? '',
+      p.keeper_delta != null ? Number(p.keeper_delta).toFixed(1) : '',
+      p.manager_label ?? '',
+    ]);
+    exportCsv('keeper-rankings.csv', headers, rows);
+  };
+
   const isKeeperView = view === 'keeper';
   const ageDays = ecr.status === 'ready' ? ageInDays(ecr.data.scrape_date) : null;
   const isStale = ageDays != null && ageDays > 14;
@@ -471,6 +533,15 @@ export default function Rankings() {
                 ? ' players'
                 : ` of ${ecr.data.count.toLocaleString()} players`}
             </span>
+            <button
+              type="button"
+              className="rankings-export-btn"
+              onClick={handleExportRedraft}
+              disabled={redraftSorted.length === 0}
+              title="Download current view as CSV"
+            >
+              Export CSV
+            </button>
           </div>
 
           {redraftFiltered.length === 0 && (
@@ -600,11 +671,22 @@ export default function Rankings() {
                 ? ' rostered players'
                 : ` of ${keeper.rows.length.toLocaleString()} rostered players`}
             </span>
-            {keeper.draftLabel && (
-              <span className="dim" style={{ fontSize: 13 }}>
-                Draft: {keeper.draftLabel}
-              </span>
-            )}
+            <div className="rankings-meta__right">
+              {keeper.draftLabel && (
+                <span className="dim" style={{ fontSize: 13 }}>
+                  Draft: {keeper.draftLabel}
+                </span>
+              )}
+              <button
+                type="button"
+                className="rankings-export-btn"
+                onClick={handleExportKeeper}
+                disabled={keeperSorted.length === 0}
+                title="Download current view as CSV"
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
 
           {keeperFiltered.length === 0 && (
