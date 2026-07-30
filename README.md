@@ -7,7 +7,7 @@ A mobile-first Vite + React app for a Sleeper fantasy football league.
 - `/drafts` — **Draft board** per linked season: teams as columns, rounds as rows (Sleeper picks + `draft_order`)
 - `/rules` — Rule suggestions, voting, and **per-rule discussion** threads. One vote and one suggestion per logged-in account; the suggester is implied from the account, no free-text name field.
 - `/keepers` — Manager keeper nominations from your Sleeper roster (logged-in managers can only nominate for their own team; commissioners can edit on anyone's behalf). Rule: keeper 1 is guaranteed; if you want a second keeper, you must pick both keeper 2 and keeper 3 — one is randomised at the league ceremony. Optional `VITE_KEEPERS_REVEAL_AT` (ISO 8601) hides the **All nominations** table until that time; your own latest pick stays visible on `/keepers`. Set the same instant as **`KEEPERS_REVEAL_AT`** (server env) so `GET /api/keeper-nominations` returns only each member's own rows until reveal — commissioners still receive the full list. **`/mock-draft`** stays open before reveal: keeper-cost rounds use **your** latest nomination on file (other teams simulate without keepers unless you're the commissioner).
-- `/rankings` — **Expert player rankings**: FantasyPros Expert Consensus redraft **overall** (filter by position — no kickers; **ALL** omits kickers), plus **Keeper: draft vs consensus** (linked Sleeper startup draft vs current ECR for rostered players). Data: [DynastyProcess](https://github.com/dynastyprocess/data) (`db_fpecr_latest.csv`, `db_playerids.csv`) and Sleeper; ECR cached 1h server-side with a 24h stale-on-error window. Keeper merge runs in the browser. No API keys; nothing to configure.
+- `/rankings` — **Expert player rankings**: FantasyPros Expert Consensus redraft **overall** via [DynastyProcess](https://github.com/dynastyprocess/data) (filter by position — no kickers; **ALL** omits kickers), optional **FP live ECR / ADP (Half-PPR)** when `FANTASYPROS_API_KEY` is set, plus **Keeper: draft vs consensus** (linked Sleeper startup draft vs DynastyProcess ECR for rostered players). Keeper merge runs in the browser.
 
 
 Hosted on Vercel. Voting state lives in Neon Postgres (free tier). Sleeper data is read from the public Sleeper API.
@@ -101,6 +101,7 @@ Each migration file is wrapped in a transaction so it's all-or-nothing.
    - `VITE_SLEEPER_LEAGUE_ID` — your Sleeper league id, in all environments (Production, Preview, Development).
    - Optional **site login** (shared password for everyone in the league): set `SITE_PASSWORD` to a passphrase and `AUTH_SECRET` to a long random string (at least 16 characters). If either is missing or `AUTH_SECRET` is too short, login is disabled and the app stays public. Add both to Production (and Preview if you use preview deploys).
    - Optional **per-member logins** (after `app_users` exists in `db/schema.sql`): set **`APP_USERS_ENABLED`** to `1`, `true`, or `yes` on **Production** (and Preview if you use it), alongside **`DATABASE_URL`** and **`AUTH_SECRET`** (at least 16 characters). Without all three, the app stays public and there is no sign-in gate. Create rows with `npm run create-user -- <username> <password> [sleeper_user_id]` (requires Node 20+ for `--env-file` in the script). You can use member accounts only, shared password only, or both; the sign-in page adapts.
+   - Optional **`FANTASYPROS_API_KEY`** — enables live Half-PPR ECR/ADP views on `/rankings` (server-only; never `VITE_*`).
 5. Apply the schema: Neon dashboard → SQL editor → paste `db/schema.sql` → run.  
    `schema.sql` is idempotent for **new** tables, so re-running picks up any tables that didn't exist before (e.g. `rule_posts`, `app_users`). It does **not** alter existing tables — for those, apply the relevant file from `db/migrations/` instead. The safest path is `npm run db:migrate -- db/migrations/<file>.sql` from a machine whose `.env.local` points at the same DB you're targeting (see "Applying schema changes" above).
 6. Trigger a deploy. Visit your `*.vercel.app` URL.
@@ -124,7 +125,7 @@ api/                Vercel serverless functions (Node 18, ESM)
   votes.js            POST, DELETE — keyed to the logged-in `app_users.id`
   rule-posts.js       GET, POST, DELETE — forum messages under a rule
   keeper-nominations.js  GET, POST — Sleeper-roster keeper picks; managers can only edit their own
-  rankings.js         GET — proxies + caches FantasyPros ECR via DynastyProcess open-data
+  rankings.js         GET — DynastyProcess ECR mirror + optional FantasyPros live Half-PPR ECR/ADP
 db/
   schema.sql          first-time database setup (idempotent)
   migrations/         additive schema changes; apply with `npm run db:migrate -- <file>`
@@ -195,10 +196,11 @@ vite.config.js
 
 ## Expert rankings (`/rankings`)
 
-The rankings page is a thin viewer over an open mirror of FantasyPros ECR.
+The rankings page views FantasyPros consensus data from two sources.
 
-- **Source (ECR):** [`dynastyprocess/data`](https://github.com/dynastyprocess/data) — `db_fpecr_latest.csv` (~700 KB, weekly cron) and `db_playerids.csv` (~2.5 MB) for the Sleeper ↔ FantasyPros id join.
-- **Server:** `api/rankings.js` fetches those two files, parses them, caches **`redraft-overall`** only in memory for **1 hour**, with **24 hours** stale-on-error. Unknown `?page_type=` falls back to `redraft-overall`. Sets `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`.
-- **Client:** `src/pages/Rankings.jsx` — **Redraft rankings** (Bye / SD / Best-Worst / Owned) vs **Keeper: draft vs consensus** (startup **PICK {season}**, **RD cost**, **RD ECR**, consensus **ECR**, **Delta**, manager filter, sortable columns). Keeper mode walks `previous_league_id` until it finds a season whose primary snake draft has picks, loads those picks plus **rosters for that league**, and merges with ECR via Sleeper player ids. League constants live in `leagueFormat` in `src/config.js`. Kickers excluded from filters and from ALL. Scraped date shown with staleness hint after 14 days.
+- **Source (DynastyProcess ECR):** [`dynastyprocess/data`](https://github.com/dynastyprocess/data) — `db_fpecr_latest.csv` (~700 KB, weekly cron) and `db_playerids.csv` (~2.5 MB) for the Sleeper ↔ FantasyPros id join. Used by **Redraft rankings**, **Keeper**, Mock Draft, and My Team.
+- **Source (live FantasyPros):** Optional `GET …/consensus-rankings` via the [public v2 API](https://www.fantasypros.com/api-data/) when **`FANTASYPROS_API_KEY`** is set (server-only). Powers **FP live ECR (Half-PPR)** (`?page_type=fp-ecr-half`) and **FP live ADP (Half-PPR)** (`?page_type=fp-adp-half`). Cached **30 minutes** in memory (6h stale-on-error). Without the key those views return 503; DynastyProcess redraft still works.
+- **Server:** `api/rankings.js` caches **`redraft-overall`** for **1 hour** (24h stale-on-error). Unknown `?page_type=` falls back to `redraft-overall`.
+- **Client:** `src/pages/Rankings.jsx` — **Redraft rankings** / live FP views (Bye / SD / Best-Worst / Owned) vs **Keeper: draft vs consensus** (startup **PICK {season}**, **RD cost**, **RD ECR**, consensus **ECR**, **Delta**, manager filter, sortable columns). Keeper always uses DynastyProcess `redraft-overall`. Kickers excluded from filters and from ALL.
 - **Auth:** Same `assertSiteAuth` gate as the rest of the API — the page is read-only and accessible to any logged-in member or shared-password session.
-- **No env vars required.** This feature has no secrets, no DB, no migrations.
+- **Env:** DynastyProcess path needs no secrets. Live FP views need `FANTASYPROS_API_KEY` in `.env` / Vercel (never `VITE_*`).

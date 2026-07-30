@@ -14,8 +14,17 @@ import './Rankings.css';
 
 const VIEW_OPTIONS = [
   { value: 'redraft', label: 'Redraft rankings' },
+  { value: 'fp-ecr', label: 'FP live ECR (Half-PPR)' },
+  { value: 'fp-adp', label: 'FP live ADP (Half-PPR)' },
   { value: 'keeper', label: 'Keeper: draft vs consensus' },
 ];
+
+/** Map UI view → /api/rankings?page_type= (keeper always uses DynastyProcess redraft). */
+function pageTypeForView(view) {
+  if (view === 'fp-ecr') return 'fp-ecr-half';
+  if (view === 'fp-adp') return 'fp-adp-half';
+  return 'redraft-overall';
+}
 
 /** League uses 1 QB + flex — no kickers in filters or UX. */
 const POSITION_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DST'];
@@ -183,8 +192,10 @@ export default function Rankings() {
 
   useEffect(() => {
     let cancelled = false;
+    const pageType = pageTypeForView(view);
     setEcr({ status: 'loading' });
-    fetch('/api/rankings?page_type=redraft-overall', { credentials: 'include' })
+    setRedraftSort(null);
+    fetch(`/api/rankings?page_type=${encodeURIComponent(pageType)}`, { credentials: 'include' })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -199,7 +210,7 @@ export default function Rankings() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     if (view !== 'keeper') return;
@@ -208,6 +219,8 @@ export default function Rankings() {
       return;
     }
     if (ecr.status !== 'ready') return;
+    // Keeper always compares against DynastyProcess redraft, never live FP lists.
+    if (ecr.data.page_type !== 'redraft-overall') return;
 
     const ecrPlayers = ecr.data.players;
     let cancelled = false;
@@ -332,7 +345,8 @@ export default function Rankings() {
   }, [keeperFiltered, keeperSort]);
 
   const handleExportRedraft = () => {
-    const headers = ['Rank', 'Player', 'Pos', 'Team', 'Bye', 'SD', 'Best', 'Worst', 'Owned%'];
+    const rankHeader = view === 'fp-adp' ? 'ADP' : 'ECR';
+    const headers = [rankHeader, 'Player', 'Pos', 'Team', 'Bye', 'SD', 'Best', 'Worst', 'Owned%'];
     const rows = redraftSorted.map((p) => [
       p.ecr ?? '',
       p.name ?? '',
@@ -344,7 +358,13 @@ export default function Rankings() {
       p.worst ?? '',
       p.owned_avg != null ? Math.round(p.owned_avg) : '',
     ]);
-    exportCsv('redraft-rankings.csv', headers, rows);
+    const filename =
+      view === 'fp-adp'
+        ? 'fp-adp-half-ppr.csv'
+        : view === 'fp-ecr'
+          ? 'fp-ecr-half-ppr.csv'
+          : 'redraft-rankings.csv';
+    exportCsv(filename, headers, rows);
   };
 
   const handleExportKeeper = () => {
@@ -375,6 +395,9 @@ export default function Rankings() {
   };
 
   const isKeeperView = view === 'keeper';
+  const isFpLiveView = view === 'fp-ecr' || view === 'fp-adp';
+  const isListView = !isKeeperView;
+  const rankColLabel = view === 'fp-adp' ? 'ADP' : 'ECR';
   const ageDays = ecr.status === 'ready' ? ageInDays(ecr.data.scrape_date) : null;
   const isStale = ageDays != null && ageDays > 14;
 
@@ -390,7 +413,17 @@ export default function Rankings() {
       <header className="page-header">
         <span className="eyebrow">Draft prep</span>
         <h1>Expert rankings</h1>
-        {ecr.status === 'ready' && (
+        {ecr.status === 'ready' && isListView && ecr.data.source === 'fantasypros' && (
+          <p className="rankings-source">
+            FantasyPros API · Half-PPR · {view === 'fp-adp' ? 'ADP' : 'redraft ECR'}
+            {ecr.data.scrape_date && (
+              <>
+                {' · '}as of <strong>{formatScrapeDate(ecr.data.scrape_date)}</strong>
+              </>
+            )}
+          </p>
+        )}
+        {ecr.status === 'ready' && (view === 'redraft' || isKeeperView) && ecr.data.source !== 'fantasypros' && (
           <p className="rankings-source">
             FantasyPros Expert Consensus (redraft overall), via{' '}
             <a href="https://github.com/dynastyprocess/data" target="_blank" rel="noreferrer">
@@ -493,14 +526,25 @@ export default function Rankings() {
           <p>
             <strong>Could not load rankings.</strong> {ecr.message}
           </p>
-          <p className="muted">
-            The upstream data is mirrored on GitHub and refreshes weekly. Try again in a minute, or
-            check{' '}
-            <a href="https://github.com/dynastyprocess/data/actions" target="_blank" rel="noreferrer">
-              the upstream pipeline
-            </a>
-            .
-          </p>
+          {isFpLiveView ? (
+            <p className="muted">
+              Live FantasyPros views need <code>FANTASYPROS_API_KEY</code> set on the server (Vercel
+              env or local <code>.env</code>). DynastyProcess redraft still works without it.
+            </p>
+          ) : (
+            <p className="muted">
+              The upstream data is mirrored on GitHub and refreshes weekly. Try again in a minute, or
+              check{' '}
+              <a
+                href="https://github.com/dynastyprocess/data/actions"
+                target="_blank"
+                rel="noreferrer"
+              >
+                the upstream pipeline
+              </a>
+              .
+            </p>
+          )}
         </div>
       )}
 
@@ -558,9 +602,13 @@ export default function Rankings() {
                       sortState={redraftSort}
                       onSort={toggleRedraftSort}
                       className="rankings-th rankings-th--rank rankings-th--sortable"
-                      title="Expert consensus rank"
+                      title={
+                        view === 'fp-adp'
+                          ? 'Average draft position (Half-PPR)'
+                          : 'Expert consensus rank'
+                      }
                     >
-                      Rank
+                      {rankColLabel}
                     </SortTh>
                     <SortTh
                       sortKey="name"
