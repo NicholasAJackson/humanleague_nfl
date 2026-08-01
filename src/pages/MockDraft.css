@@ -716,7 +716,7 @@
 
 /* Board fills width; capped height so bottom workspace dominates like Sleeper desktop */
 .mock-draft-live-board-shell {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   min-height: 0;
   min-width: 0;
   max-height: min(38vh, 320px);
@@ -759,31 +759,51 @@
   background: rgba(45, 212, 191, 0.15);
 }
 
+/* True full-room board: grow into all space below the top bar */
 .mock-draft-live-board-shell--expanded {
-  flex: 1;
+  flex: 1 1 auto;
   max-height: none;
-}
-
-.mock-draft-live-board-shell--expanded .mock-draft-board-wrap--compact {
-  flex: 1;
-}
-
-.mock-draft-live-board-shell--expanded .mock-draft-board-wrap--compact .mock-draft-board-scroll {
-  max-height: none;
+  height: 100%;
 }
 
 .mock-draft-live-overlay__inner--board-expanded {
   gap: 0.45rem;
 }
 
+.mock-draft-live-overlay__inner--board-expanded .mock-draft-live-board-shell--expanded {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+}
+
+.mock-draft-live-board-shell--expanded > .mock-draft-board-wrap--compact {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 0;
+  height: 100%;
+}
+
+.mock-draft-live-board-shell--expanded .mock-draft-board-wrap--compact .mock-draft-board-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  max-height: none;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (min-width: 961px) {
-  .mock-draft-live-board-shell {
+  .mock-draft-live-board-shell:not(.mock-draft-live-board-shell--expanded) {
     max-height: min(42vh, 380px);
   }
 }
 
 @media (max-width: 960px) {
-  .mock-draft-live-board-shell {
+  .mock-draft-live-board-shell:not(.mock-draft-live-board-shell--expanded) {
     max-height: min(44vh, 300px);
   }
 }
