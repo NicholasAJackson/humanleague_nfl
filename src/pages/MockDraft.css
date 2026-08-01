@@ -613,100 +613,63 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  padding: 0.5rem clamp(0.5rem, 2vw, 1rem) 0.75rem;
+  padding: 0.2rem clamp(0.35rem, 1.2vw, 0.6rem) 0.3rem;
   max-width: 100vw;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
-/* Sleeper-style top bar */
+/* Compact icon bar — back | countdown | fullscreen */
 .mock-draft-live-bar {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
   align-items: center;
-  gap: 0.5rem 0.75rem;
-  padding: 0.35rem 0.45rem;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(94, 234, 212, 0.18);
+  gap: 0.2rem;
+  padding: 0.05rem 0.1rem;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(94, 234, 212, 0.14);
+  min-height: 2rem;
 }
 
-.mock-draft-live-bar__back {
-  padding: 0.35rem 0.55rem;
-  border-radius: 10px;
-  font-size: var(--fs-sm);
-  font-weight: 600;
+.mock-draft-live-bar__back,
+.mock-draft-live-bar__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 8px;
   color: #99f6e4;
-  border: 1px solid rgba(94, 234, 212, 0.35);
-  background: rgba(13, 148, 136, 0.12);
+  border: 1px solid transparent;
+  background: transparent;
 }
 
-.mock-draft-live-bar__back:hover {
-  background: rgba(45, 212, 191, 0.15);
+.mock-draft-live-bar__back:hover,
+.mock-draft-live-bar__expand:hover {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(94, 234, 212, 0.28);
 }
 
 .mock-draft-live-bar__center {
   min-width: 0;
-  text-align: center;
-}
-
-.mock-draft-live-bar__title {
-  margin: 0;
-  font-size: clamp(0.95rem, 2vw, 1.05rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.mock-draft-live-bar__meta {
-  margin: 0.1rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.35;
-}
-
-@media (min-width: 961px) {
-  .mock-draft-live-bar__meta {
-    font-size: var(--fs-sm);
-  }
-}
-
-.mock-draft-live-bar__sep {
-  opacity: 0.55;
-}
-
-.mock-draft-live-bar__you {
-  color: #86efac;
-  font-weight: 700;
-}
-
-.mock-draft-live-bar__right {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.45rem;
-}
-
-.mock-draft-live-bar__expand {
-  padding: 0.35rem 0.55rem;
-  border-radius: 10px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #e0f2fe;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(30, 41, 59, 0.85);
-  white-space: nowrap;
-}
-
-.mock-draft-live-bar__expand:hover {
-  background: rgba(51, 65, 85, 0.95);
+  justify-content: center;
 }
 
 .mock-draft-live-bar__timer {
-  font-size: clamp(1.35rem, 3vw, 1.85rem);
+  font-size: 1.15rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: #e0f2fe;
   line-height: 1;
+}
+
+.mock-draft-live-bar__timer--mine {
+  color: #86efac;
 }
 
 .mock-draft-live-bar__timer--warn {
@@ -714,60 +677,56 @@
   animation: mock-draft-pulse 1s ease-in-out infinite;
 }
 
-/* Board fills width; capped height so bottom workspace dominates like Sleeper desktop */
+.mock-draft-live-bar__timer--idle {
+  opacity: 0.35;
+}
+
+.mock-draft-live-bar__done {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #86efac;
+  line-height: 1;
+}
+
+/* Board ≥ ~half the room; player list fills the rest below the slim banner */
 .mock-draft-live-board-shell {
-  flex: 0 0 auto;
-  min-height: 0;
+  flex: 1 1 52%;
+  min-height: 50%;
   min-width: 0;
-  max-height: min(38vh, 320px);
+  max-height: none;
   display: flex;
   flex-direction: column;
-  padding: 0.35rem;
-  border-radius: 12px;
+  padding: 0.15rem;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.18);
-  gap: 0.3rem;
+  overflow: hidden;
 }
 
-.mock-draft-live-board-shell__toolbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0 0.15rem;
+.mock-draft-live-board-shell > .mock-draft-board-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
 }
 
-.mock-draft-live-board-shell__label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.mock-draft-live-board-shell__expand {
-  padding: 0.25rem 0.5rem;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #99f6e4;
-  border: 1px solid rgba(94, 234, 212, 0.35);
-  background: rgba(13, 148, 136, 0.12);
-}
-
-.mock-draft-live-board-shell__expand:hover {
-  background: rgba(45, 212, 191, 0.15);
+.mock-draft-live-board-shell .mock-draft-board-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* True full-room board: grow into all space below the top bar */
 .mock-draft-live-board-shell--expanded {
   flex: 1 1 auto;
+  min-height: 0;
   max-height: none;
   height: 100%;
 }
 
 .mock-draft-live-overlay__inner--board-expanded {
-  gap: 0.45rem;
+  gap: 0.25rem;
 }
 
 .mock-draft-live-overlay__inner--board-expanded .mock-draft-live-board-shell--expanded {
@@ -794,18 +753,6 @@
   max-height: none;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-}
-
-@media (min-width: 961px) {
-  .mock-draft-live-board-shell:not(.mock-draft-live-board-shell--expanded) {
-    max-height: min(42vh, 380px);
-  }
-}
-
-@media (max-width: 960px) {
-  .mock-draft-live-board-shell:not(.mock-draft-live-board-shell--expanded) {
-    max-height: min(44vh, 300px);
-  }
 }
 
 .mock-draft-live-results {
@@ -837,35 +784,41 @@
 }
 
 .mock-draft-live-workspace {
-  flex: 1;
+  flex: 1 1 42%;
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  gap: 0.45rem;
+  gap: 0.3rem;
 }
 
 .mock-draft-live-mobile-dock {
   display: none;
   flex-shrink: 0;
-  gap: 0.25rem;
-  padding: 0.15rem;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  align-self: stretch;
+  width: 100%;
+  gap: 0.15rem;
+  padding: 0.12rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
 }
 
 .mock-draft-live-dock-tab {
-  flex: 1;
-  padding: 0.4rem 0.35rem;
-  border-radius: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.22rem 0.4rem;
+  border-radius: 999px;
   border: none;
   background: transparent;
   color: var(--color-text-dim);
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .mock-draft-live-dock-tab--active {
@@ -889,8 +842,8 @@
 
   .mock-draft-live-workspace-grid {
     display: grid;
-    grid-template-columns: minmax(0, 65%) minmax(260px, 35%);
-    gap: 0.65rem;
+    grid-template-columns: minmax(0, 72%) minmax(220px, 28%);
+    gap: 0.55rem;
     align-items: stretch;
   }
 
@@ -929,17 +882,23 @@
 }
 
 .mock-draft-live-players-col {
+  flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 0.4rem 0.45rem;
+  overflow: hidden;
 }
 
 .mock-draft-live-players-inner {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-height: 0;
   min-width: 0;
 }
@@ -1050,6 +1009,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
 }
 
 .mock-draft-board-title--compact {
@@ -1063,14 +1023,157 @@
   min-width: 0;
 }
 
-.mock-draft-live-pick-hint {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: 1.45;
+/* Live board: keep narrow columns; taller rows (~5 rounds in view, scroll for more) */
+.mock-draft-board-wrap--dense .mock-draft-board-scroll {
+  border-radius: 8px;
+}
+
+.mock-draft-board--dense {
+  font-size: 0.78rem;
+}
+
+.mock-draft-board--dense .mock-draft-board__corner,
+.mock-draft-board--dense .mock-draft-board__rd {
+  padding: 0.4rem 0.28rem;
+  font-size: 0.72rem;
+}
+
+.mock-draft-board--dense .mock-draft-board__team-head {
+  padding: 0.4rem 0.28rem;
+  min-width: 68px;
+  max-width: 78px;
+}
+
+.mock-draft-board--dense .mock-draft-board__team-head--mine .mock-draft-board__team-name {
+  color: #86efac;
+}
+
+.mock-draft-board--dense .mock-draft-board__team-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mock-draft-board--dense .mock-draft-board__cell {
+  padding: 0.4rem 0.28rem;
+  min-width: 68px;
+  max-width: 78px;
+  min-height: 2.85rem;
+  vertical-align: top;
+}
+
+.mock-draft-board--dense .mock-draft-board__pick-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mock-draft-board--dense .mock-draft-board__pick-meta {
+  font-size: 0.62rem;
+  margin-top: 0.12rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mock-draft-board--dense .mock-draft-board__pick-slot {
+  opacity: 0.7;
+}
+
+.mock-draft-board--dense .mock-draft-board__keeper-cost-inner {
+  gap: 0.2rem;
+}
+
+.mock-draft-board--dense .mock-draft-board__empty {
+  font-size: 0.72rem;
 }
 
 .mock-draft-live-filters {
-  margin-bottom: 0;
+  margin: 0;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.mock-draft-live-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.mock-draft-live-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.22);
+  color: #e0f2fe;
+}
+
+.mock-draft-live-search-btn:hover {
+  border-color: rgba(94, 234, 212, 0.4);
+  color: #99f6e4;
+}
+
+.mock-draft-live-search {
+  min-width: 0;
+  width: 5.75rem;
+}
+
+.mock-draft-live-search input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 1.45rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  background: rgba(0, 0, 0, 0.28);
+  color: inherit;
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.mock-draft-live-pills {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.2rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.mock-draft-live-pill {
+  box-sizing: border-box;
+  width: 100%;
+  height: 1.45rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.45rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.mock-draft-live-pill--active {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(56, 189, 248, 0.14);
 }
 
 .mock-draft-live-table-scroll {
@@ -1142,14 +1245,18 @@
 }
 
 .mock-draft-live-table__row {
+  cursor: default;
+}
+
+.mock-draft-live-table__row--pickable {
   cursor: pointer;
 }
 
-.mock-draft-live-table__row:hover {
+.mock-draft-live-table__row--pickable:hover {
   background: rgba(56, 189, 248, 0.09);
 }
 
-.mock-draft-live-table__row:focus-visible {
+.mock-draft-live-table__row--pickable:focus-visible {
   outline: 2px solid rgba(56, 189, 248, 0.65);
   outline-offset: -2px;
 }

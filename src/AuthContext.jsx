@@ -49,11 +49,16 @@ export function AuthProvider({ children }) {
         return;
       }
       const data = await res.json();
+      const authEnabled = Boolean(data.authEnabled);
+      // `vercel dev` uses Vercel "Development" env. AUTH_SECRET / APP_USERS_ENABLED are often
+      // Preview/Production-only, so auth looks disabled even when .env.local has them.
+      // Treat that like Vite-only: allow browsing locally without a session.
+      const devBypass = Boolean(import.meta.env.DEV && !authEnabled);
       setState({
         ready: true,
-        authenticated: Boolean(data.authenticated),
-        authEnabled: Boolean(data.authEnabled),
-        devBypass: false,
+        authenticated: Boolean(data.authenticated) || devBypass,
+        authEnabled,
+        devBypass,
         user: normalizeUser(data.user),
       });
     } catch {

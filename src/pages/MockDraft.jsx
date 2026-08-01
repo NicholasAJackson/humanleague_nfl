@@ -100,6 +100,59 @@ function fmtKeeperCostPlayer(pid, lookup) {
   return x ? `${x.name} (${x.position || '?'})` : pid;
 }
 
+function shortManagerLabel(label) {
+  const s = String(label || '').trim();
+  if (!s) return '—';
+  if (s.length <= 9) return s;
+  const first = s.split(/\s+/)[0];
+  return first.length <= 9 ? first : `${first.slice(0, 8)}…`;
+}
+
+function shortPlayerName(name) {
+  const s = String(name || '').trim();
+  if (!s) return '—';
+  if (s.length <= 14) return s;
+  const parts = s.split(/\s+/);
+  if (parts.length >= 2) {
+    const compact = `${parts[0][0]}. ${parts[parts.length - 1]}`;
+    if (compact.length <= 14) return compact;
+  }
+  return `${s.slice(0, 13)}…`;
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ExpandIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 3H3v6M15 3h6v6M9 21H3v-6M21 15v6h-6" />
+    </svg>
+  );
+}
+
+function CollapseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 9H3V3M15 9h6V3M9 15H3v6M21 15v6h-6" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" />
+    </svg>
+  );
+}
+
 function fmtClock(seconds) {
   const s = Math.max(0, seconds);
   const m = Math.floor(s / 60);
@@ -144,15 +197,25 @@ function MockDraftBoardPanel({
   pickQueueLength,
   labelByUserId,
   keeperCostDraft,
-  compact,
+  compact = false,
+  dense = false,
   omitHeading = false,
+  highlightUserId = '',
 }) {
-  const showCaptions = !compact;
-  const showHeading = !omitHeading;
+  const showCaptions = !compact && !dense;
+  const showHeading = !omitHeading && !dense;
   return (
-    <div className={'mock-draft-board-wrap' + (compact ? ' mock-draft-board-wrap--compact' : '')}>
+    <div
+      className={
+        'mock-draft-board-wrap' +
+        (compact || dense ? ' mock-draft-board-wrap--compact' : '') +
+        (dense ? ' mock-draft-board-wrap--dense' : '')
+      }
+    >
       {showHeading && !compact && <h3 className="mock-draft-board-title">Draft board</h3>}
-      {showHeading && compact && <h3 className="mock-draft-board-title mock-draft-board-title--compact">Board</h3>}
+      {showHeading && compact && (
+        <h3 className="mock-draft-board-title mock-draft-board-title--compact">Board</h3>
+      )}
       {showCaptions && keeperCostDraft.status === 'loading' && (
         <p className="muted mock-draft-board-caption">Loading startup draft rounds for keeper costs…</p>
       )}
@@ -172,11 +235,11 @@ function MockDraftBoardPanel({
         <p className="muted mock-draft-board-caption">Could not load startup draft rounds for keeper costs.</p>
       )}
       <div className="mock-draft-board-scroll">
-        <table className="mock-draft-board">
+        <table className={'mock-draft-board' + (dense ? ' mock-draft-board--dense' : '')}>
           <thead>
             <tr>
               <th scope="col" className="mock-draft-board__corner">
-                Rd
+                #
               </th>
               {slotOrderUserIds.map((uid, slotIdx) => {
                 const highlightCol =
@@ -184,15 +247,21 @@ function MockDraftBoardPanel({
                   currentPickMeta &&
                   pickCursor < pickQueueLength &&
                   currentPickMeta.slotIndex === slotIdx;
+                const mine = highlightUserId && uid === highlightUserId;
                 return (
                   <th
                     key={uid}
                     scope="col"
                     className={
-                      'mock-draft-board__team-head' + (highlightCol ? ' mock-draft-board__team-head--active' : '')
+                      'mock-draft-board__team-head' +
+                      (highlightCol ? ' mock-draft-board__team-head--active' : '') +
+                      (mine ? ' mock-draft-board__team-head--mine' : '')
                     }
+                    title={labelByUserId.get(uid)}
                   >
-                    <span className="mock-draft-board__team-name">{labelByUserId.get(uid)}</span>
+                    <span className="mock-draft-board__team-name">
+                      {dense ? shortManagerLabel(labelByUserId.get(uid)) : labelByUserId.get(uid)}
+                    </span>
                   </th>
                 );
               })}
@@ -220,12 +289,27 @@ function MockDraftBoardPanel({
                     !cell &&
                     hasKeeperCost && (
                       <div className="mock-draft-board__keeper-cost-inner">
-                        {keeperIds.map((pid) => (
-                          <div key={pid} className="mock-draft-board__keeper-cost-block">
-                            <span className="mock-draft-board__pick-name">{fmtKeeperCostPlayer(pid, lookup)}</span>
-                            <span className="mock-draft-board__pick-meta muted">Keeper · rd cost</span>
-                          </div>
-                        ))}
+                        {keeperIds.map((pid) => {
+                          const meta = lookup?.get(pid);
+                          const name = meta?.name || pid;
+                          const pos = meta?.position || '';
+                          const team = meta?.team || '';
+                          return (
+                            <div key={pid} className="mock-draft-board__keeper-cost-block">
+                              <span className="mock-draft-board__pick-name">
+                                {dense ? shortPlayerName(name) : fmtKeeperCostPlayer(pid, lookup)}
+                              </span>
+                              {dense ? (
+                                <span className="mock-draft-board__pick-meta muted">
+                                  {[pos, team].filter(Boolean).join(' ') || 'K'}
+                                  <span className="mock-draft-board__pick-slot"> · K</span>
+                                </span>
+                              ) : (
+                                <span className="mock-draft-board__pick-meta muted">Keeper · rd cost</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   return (
@@ -239,14 +323,19 @@ function MockDraftBoardPanel({
                     >
                       {cell ? (
                         <>
-                          <span className="mock-draft-board__pick-name">{cell.name}</span>
+                          <span className="mock-draft-board__pick-name">
+                            {dense ? shortPlayerName(cell.name) : cell.name}
+                          </span>
                           <span className="mock-draft-board__pick-meta muted">
-                            {cell.pos}
-                            {cell.pickKind === 'user' ? ' · you' : ''}
+                            {[cell.pos, cell.team].filter(Boolean).join(' ')}
+                            {cell.overallPick != null ? (
+                              <span className="mock-draft-board__pick-slot"> · {cell.overallPick}</span>
+                            ) : null}
+                            {!dense && cell.pickKind === 'user' ? ' · you' : ''}
                           </span>
                         </>
                       ) : (
-                        cellKeeper || <span className="mock-draft-board__empty">—</span>
+                        cellKeeper || <span className="mock-draft-board__empty">·</span>
                       )}
                     </td>
                   );
@@ -320,10 +409,18 @@ export default function MockDraft() {
 
   const [myTeamUserId, setMyTeamUserId] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
+  const [playerSearchOpen, setPlayerSearchOpen] = useState(false);
+  const playerSearchInputRef = useRef(null);
   const [playerPos, setPlayerPos] = useState('ALL');
   const [playerSort, setPlayerSort] = useState({ key: 'ecr', dir: 'asc' });
 
   const [liveMobileDockTab, setLiveMobileDockTab] = useState('players');
+
+  useEffect(() => {
+    if (!playerSearchOpen) return;
+    const id = window.requestAnimationFrame(() => playerSearchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [playerSearchOpen]);
 
   const rankingsPlayers = rankings.status === 'ready' ? rankings.data.players || [] : [];
 
@@ -554,7 +651,13 @@ export default function MockDraft() {
         credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const apiMsg = typeof data.error === 'string' ? data.error : '';
+        const err = new Error(apiMsg || `Could not load ${label}`);
+        err.status = res.status;
+        err.apiError = apiMsg;
+        throw err;
+      }
       const players = Array.isArray(data.players) ? data.players.filter((p) => p?.sleeper_id) : [];
       if (!players.length) return null;
       return { id, label, players, scrape_date: data.scrape_date || null, count: players.length };
@@ -564,7 +667,7 @@ export default function MockDraft() {
       try {
         const [sleeper, dynasty, fp] = await Promise.all([
           loadBoard('sleeper-adp-half', 'sleeper-adp', 'Sleeper ADP (Half-PPR)'),
-          loadBoard('redraft-overall', 'dynastyprocess-ecr', 'DynastyProcess redraft ECR'),
+          loadBoard('redraft-overall', 'dynastyprocess-ecr', 'DynastyProcess redraft ECR').catch(() => null),
           loadBoard('fp-ecr-half', 'fp-ecr', 'FantasyPros live ECR (Half-PPR)').catch(() => null),
         ]);
         if (cancelled) return;
@@ -585,7 +688,15 @@ export default function MockDraft() {
         setTeamBoards(null);
       } catch (err) {
         if (!cancelled) {
-          setRankings({ status: 'error', message: err.message || String(err) });
+          const viteOnly =
+            err?.status === 503 ||
+            (typeof err?.apiError === 'string' && err.apiError.includes('Vite alone'));
+          setRankings({
+            status: 'error',
+            message: viteOnly
+              ? 'Rankings API is not available under `npm run dev`. Stop Vite and run `npx vercel dev`, then open the URL it prints (often http://localhost:3000).'
+              : err.message || String(err),
+          });
           setRankingBoards([]);
         }
       }
@@ -923,6 +1034,10 @@ export default function MockDraft() {
   const isMyPick =
     Boolean(currentPickMeta && myTeamUserId && currentPickMeta.userId === myTeamUserId && !draftComplete);
 
+  useEffect(() => {
+    if (isMyPick) setLiveMobileDockTab('players');
+  }, [isMyPick]);
+
   const takenIdsDisplay = useMemo(
     () => combinedTakenIds(draftPicks, nominationByUserId),
     [draftPicks, nominationByUserId],
@@ -1063,12 +1178,11 @@ export default function MockDraft() {
         <div className="mock-draft-live-results">
           <p className="mock-draft-live-results__title">Draft complete</p>
           <p className="muted mock-draft-live-results__copy">
-            Review the board above — expand it full screen for a clearer look. Your keepers and picks are under{' '}
-            <strong>Roster</strong>.
+            Review the board above — tap the expand control for a full look. Your keepers and picks are under Roster.
           </p>
           <div className="mock-draft-live-results__actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setBoardExpanded(true)}>
-              Expand board
+            <button type="button" className="btn btn-secondary" onClick={() => setBoardExpanded(true)} aria-label="Expand board">
+              <ExpandIcon />
             </button>
             <button type="button" className="btn btn-primary" onClick={leaveDraftRoom}>
               Done
@@ -1077,52 +1191,60 @@ export default function MockDraft() {
         </div>
       );
     }
-    if (!currentPickMeta || pickCursor >= pickQueue.length) {
-      return (
-        <p className="muted mock-draft-live-wait" aria-live="polite">
-          Waiting…
-        </p>
-      );
-    }
-    if (!isMyPick) {
-      return (
-        <p className="muted mock-draft-live-wait" aria-live="polite">
-          <strong>{labelByUserId.get(currentPickMeta.userId)}</strong> is picking…
-        </p>
-      );
-    }
     if (rankings.status !== 'ready') {
       return <p className="muted">Loading ADP…</p>;
     }
+    const canPick = Boolean(isMyPick && currentPickMeta && pickCursor < pickQueue.length);
+    const searchExpanded = playerSearchOpen || Boolean(playerSearch.trim());
     return (
       <>
-        <p className="mock-draft-live-pick-hint">
-          Click a row to draft that player. When time runs out, autopick uses FantasyPros-style need + board logic.
-        </p>
-        <div className="mock-draft-picker__filters mock-draft-live-filters">
-          <label className="mock-draft-picker__search">
-            <span className="visually-hidden">Search players</span>
-            <input
-              type="search"
-              value={playerSearch}
-              onChange={(e) => setPlayerSearch(e.target.value)}
-              placeholder="Find player…"
-              autoComplete="off"
-            />
-          </label>
-          <div className="mock-draft-picker__pills" role="tablist">
-            {POSITION_FILTERS.map((p) => (
+        <div className="mock-draft-live-filters">
+          <div className="mock-draft-live-toolbar">
+            {searchExpanded ? (
+              <label className="mock-draft-live-search">
+                <span className="visually-hidden">Search players</span>
+                <input
+                  ref={playerSearchInputRef}
+                  type="search"
+                  value={playerSearch}
+                  onChange={(e) => setPlayerSearch(e.target.value)}
+                  onBlur={() => {
+                    if (!playerSearch.trim()) setPlayerSearchOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setPlayerSearch('');
+                      setPlayerSearchOpen(false);
+                    }
+                  }}
+                  placeholder="Search…"
+                  autoComplete="off"
+                />
+              </label>
+            ) : (
               <button
-                key={p}
                 type="button"
-                role="tab"
-                aria-selected={playerPos === p}
-                className={'mock-draft-picker__pill' + (playerPos === p ? ' mock-draft-picker__pill--active' : '')}
-                onClick={() => setPlayerPos(p)}
+                className="mock-draft-live-search-btn"
+                aria-label="Search players"
+                onClick={() => setPlayerSearchOpen(true)}
               >
-                {p}
+                <SearchIcon />
               </button>
-            ))}
+            )}
+            <div className="mock-draft-live-pills" role="tablist" aria-label="Position filter">
+              {POSITION_FILTERS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  role="tab"
+                  aria-selected={playerPos === p}
+                  className={'mock-draft-live-pill' + (playerPos === p ? ' mock-draft-live-pill--active' : '')}
+                  onClick={() => setPlayerPos(p)}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="mock-draft-live-table-scroll">
@@ -1153,16 +1275,22 @@ export default function MockDraft() {
               {sortedPoolTableRows.map((p) => (
                 <tr
                   key={String(p.sleeper_id)}
-                  className="mock-draft-live-table__row"
-                  onClick={() => onManualDraftPlayer(p)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onManualDraftPlayer(p);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
+                  className={
+                    'mock-draft-live-table__row' + (canPick ? ' mock-draft-live-table__row--pickable' : '')
+                  }
+                  onClick={canPick ? () => onManualDraftPlayer(p) : undefined}
+                  onKeyDown={
+                    canPick
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onManualDraftPlayer(p);
+                          }
+                        }
+                      : undefined
+                  }
+                  tabIndex={canPick ? 0 : undefined}
+                  role={canPick ? 'button' : undefined}
                 >
                   <td className="tabular mock-draft-live-table__ecr">
                     {p.ecr != null && Number.isFinite(Number(p.ecr)) ? Number(p.ecr).toFixed(1) : '—'}
@@ -1186,8 +1314,6 @@ export default function MockDraft() {
       </>
     );
   }
-
-  const leagueLiveSubtitle = `${slotOrderUserIds?.length ?? 0}-team snake · ${pickSeconds}s · ${boardMaxRound} rds`;
 
   return (
     <div className="page mock-draft-page">
@@ -1574,62 +1700,42 @@ export default function MockDraft() {
                 onClick={leaveDraftRoom}
                 aria-label={draftComplete ? 'Close draft room' : 'Leave draft room'}
               >
-                {draftComplete ? 'Done' : '← Back'}
+                <BackIcon />
               </button>
               <div className="mock-draft-live-bar__center">
-                <h2 id="mock-draft-live-title" className="mock-draft-live-bar__title">
+                <h2 id="mock-draft-live-title" className="visually-hidden">
                   {draftComplete ? 'Mock draft results' : 'Mock draft room'}
                 </h2>
-                <p className="mock-draft-live-bar__meta muted">
-                  {draftComplete ? (
-                    <>
-                      <strong>{draftPicks.length}</strong> picks complete
-                      {myTeamUserId ? (
-                        <>
-                          {' '}
-                          · <strong>{labelByUserId.get(myTeamUserId)}</strong>
-                        </>
-                      ) : null}
-                    </>
-                  ) : currentPickMeta && pickCursor < pickQueue.length ? (
-                    <>
-                      Pick <strong>{pickCursor + 1}</strong>/<strong>{pickQueue.length}</strong> · Rd{' '}
-                      <strong>{currentPickMeta.round}</strong> · <strong>{labelByUserId.get(currentPickMeta.userId)}</strong>
-                      {isMyPick ? <span className="mock-draft-live-bar__you"> · You</span> : null}
-                    </>
-                  ) : (
-                    <>Wrapping up…</>
-                  )}
-                  <span className="mock-draft-live-bar__sep"> · </span>
-                  <span>{leagueLiveSubtitle}</span>
-                </p>
+                {draftComplete ? (
+                  <span className="mock-draft-live-bar__done" aria-live="polite">
+                    ✓
+                  </span>
+                ) : timedDraftActive && currentPickMeta && pickCursor < pickQueue.length ? (
+                  <div
+                    className={
+                      'mock-draft-live-bar__timer' +
+                      (isMyPick ? ' mock-draft-live-bar__timer--mine' : '') +
+                      (secondsLeft <= 10 ? ' mock-draft-live-bar__timer--warn' : '')
+                    }
+                    aria-live="polite"
+                    aria-label={`Time remaining ${fmtClock(secondsLeft)}`}
+                  >
+                    {fmtClock(secondsLeft)}
+                  </div>
+                ) : (
+                  <span className="mock-draft-live-bar__timer mock-draft-live-bar__timer--idle">—</span>
+                )}
               </div>
-              <div className="mock-draft-live-bar__right">
-                {rankings.status === 'ready' &&
-                  timedDraftActive &&
-                  currentPickMeta &&
-                  pickCursor < pickQueue.length &&
-                  isMyPick && (
-                    <div
-                      className={
-                        'mock-draft-live-bar__timer' +
-                        (secondsLeft <= 10 ? ' mock-draft-live-bar__timer--warn' : '')
-                      }
-                      aria-live="polite"
-                    >
-                      {fmtClock(secondsLeft)}
-                    </div>
-                  )}
-                <button
-                  type="button"
-                  className="mock-draft-live-bar__expand"
-                  onClick={() => setBoardExpanded((v) => !v)}
-                  aria-pressed={boardExpanded}
-                  title={boardExpanded ? 'Exit full-screen board' : 'Expand board full screen'}
-                >
-                  {boardExpanded ? 'Exit board' : 'Expand board'}
-                </button>
-              </div>
+              <button
+                type="button"
+                className="mock-draft-live-bar__expand"
+                onClick={() => setBoardExpanded((v) => !v)}
+                aria-pressed={boardExpanded}
+                aria-label={boardExpanded ? 'Exit full-screen board' : 'Expand board full screen'}
+                title={boardExpanded ? 'Exit full screen' : 'Full screen'}
+              >
+                {boardExpanded ? <CollapseIcon /> : <ExpandIcon />}
+              </button>
             </header>
 
             <div
@@ -1638,22 +1744,10 @@ export default function MockDraft() {
                 (boardExpanded ? ' mock-draft-live-board-shell--expanded' : '')
               }
             >
-              <div className="mock-draft-live-board-shell__toolbar">
-                <span className="muted mock-draft-live-board-shell__label">
-                  {boardExpanded ? 'Full-screen board' : 'Board'}
-                </span>
-                <button
-                  type="button"
-                  className="mock-draft-live-board-shell__expand"
-                  onClick={() => setBoardExpanded((v) => !v)}
-                  aria-pressed={boardExpanded}
-                >
-                  {boardExpanded ? 'Collapse' : 'Full screen'}
-                </button>
-              </div>
               <MockDraftBoardPanel
-                compact
+                dense
                 omitHeading
+                highlightUserId={myTeamUserId}
                 slotOrderUserIds={slotOrderUserIds}
                 boardMaxRound={boardMaxRound}
                 draftPicks={draftPicks}
