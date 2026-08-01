@@ -46,6 +46,12 @@ export function areKeeperNominationsHiddenInUi() {
   return ts != null && Date.now() < ts;
 }
 
+/** When true, new nominations and edits are blocked (reveal instant has passed). */
+export function areKeeperNominationsClosed() {
+  const ts = getKeepersRevealTimestamp();
+  return ts != null && Date.now() >= ts;
+}
+
 /** Milliseconds after which rule changes are closed, or null if not configured / invalid. */
 export function getRulesChangesCloseTimestamp() {
   if (!config.rulesChangesCloseAt) return null;

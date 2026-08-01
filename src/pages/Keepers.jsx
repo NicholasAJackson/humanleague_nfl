@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { areKeeperNominationsHiddenInUi, config } from '../config.js';
+import { areKeeperNominationsClosed, areKeeperNominationsHiddenInUi, config } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
 import {
   resolveLeagueHistoryChain,
@@ -68,6 +68,7 @@ export default function Keepers() {
   const [formErr, setFormErr] = useState(null);
 
   const nominationsHidden = areKeeperNominationsHiddenInUi();
+  const nominationsClosed = areKeeperNominationsClosed();
 
   useEffect(() => {
     if (!config.leagueId) {
@@ -229,6 +230,10 @@ export default function Keepers() {
     setFormMsg(null);
     setFormErr(null);
 
+    if (areKeeperNominationsClosed()) {
+      setFormErr('Keeper nominations are locked — the reveal time has passed.');
+      return;
+    }
     if (!sleeperUserId) {
       setFormErr('Choose which manager you are (Sleeper account).');
       return;
@@ -272,11 +277,7 @@ export default function Keepers() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      setFormMsg(
-        areKeeperNominationsHiddenInUi()
-          ? 'Saved. Your nomination is stored; the league list stays hidden until the reveal date.'
-          : 'Saved. The table below updates for everyone.',
-      );
+      setFormMsg('Saved. Your nomination is stored; the league list stays hidden until the reveal date.');
       await loadNominations();
     } catch (err) {
       setFormErr(err.message || 'Could not save');
@@ -379,100 +380,111 @@ export default function Keepers() {
         </section>
       )}
 
-      <form className="card keepers-form keepers-form-card" onSubmit={onSubmit}>
-        <div className="keepers-locked-season">
-          <span className="keepers-label">Keepers carry into</span>
-          {chainLoading || !chain[0] ? (
-            <span className="keepers-locked-season__value muted">Loading league season…</span>
-          ) : (
-            <>
-              <span className="keepers-locked-season__value">
-                {Number(chain[0].season) + 1} season
-              </span>
-              <span className="keepers-locked-season__sub">
-                Picked from your <strong>{chain[0].season}</strong> roster
-                {chain[0].name ? ` · ${chain[0].name}` : ''}
-              </span>
-            </>
-          )}
-        </div>
-
-        <label>
-          <span className="keepers-label">You are (Sleeper manager)</span>
-          <select
-            value={sleeperUserId}
-            disabled={leagueLoading || !userOptions.length || Boolean(lockedSleeperUserId)}
-            onChange={(e) => setSleeperUserId(e.target.value)}
-            required
-          >
-            <option value="">Select your team…</option>
-            {userOptions.map((u) => (
-              <option key={u.user_id} value={u.user_id}>
-                {u.metadata?.team_name || u.display_name || u.user_id}
-              </option>
-            ))}
-          </select>
-          {lockedSleeperUserId && (
-            <p className="keepers-hint keepers-hint--inline">
-              You can only nominate keepers for your own team.
+      {nominationsClosed ? (
+        <section className="card keepers-form-card" aria-live="polite">
+          <div className="keepers-reveal-gate" role="status">
+            <p className="keepers-reveal-gate__title">Nominations locked</p>
+            <p className="keepers-reveal-gate__body">
+              The reveal time has passed — nominations can no longer be submitted or changed.
             </p>
+          </div>
+        </section>
+      ) : (
+        <form className="card keepers-form keepers-form-card" onSubmit={onSubmit}>
+          <div className="keepers-locked-season">
+            <span className="keepers-label">Keepers carry into</span>
+            {chainLoading || !chain[0] ? (
+              <span className="keepers-locked-season__value muted">Loading league season…</span>
+            ) : (
+              <>
+                <span className="keepers-locked-season__value">
+                  {Number(chain[0].season) + 1} season
+                </span>
+                <span className="keepers-locked-season__sub">
+                  Picked from your <strong>{chain[0].season}</strong> roster
+                  {chain[0].name ? ` · ${chain[0].name}` : ''}
+                </span>
+              </>
+            )}
+          </div>
+
+          <label>
+            <span className="keepers-label">You are (Sleeper manager)</span>
+            <select
+              value={sleeperUserId}
+              disabled={leagueLoading || !userOptions.length || Boolean(lockedSleeperUserId)}
+              onChange={(e) => setSleeperUserId(e.target.value)}
+              required
+            >
+              <option value="">Select your team…</option>
+              {userOptions.map((u) => (
+                <option key={u.user_id} value={u.user_id}>
+                  {u.metadata?.team_name || u.display_name || u.user_id}
+                </option>
+              ))}
+            </select>
+            {lockedSleeperUserId && (
+              <p className="keepers-hint keepers-hint--inline">
+                You can only nominate keepers for your own team.
+              </p>
+            )}
+            {lockedSleeperUserId && !leagueLoading && users.length > 0 && !users.some((u) => u.user_id === lockedSleeperUserId) && (
+              <p className="keepers-warn">
+                Your account isn’t in this season’s roster. Pick a different season or ask the commissioner to check your
+                Sleeper id.
+              </p>
+            )}
+          </label>
+
+          <p className="keepers-hint">
+            First load may take a few seconds while player names download from Sleeper.
+          </p>
+          <label>
+            <span className="keepers-label">Keeper 1 (guaranteed)</span>
+            <select value={k1} onChange={(e) => setK1(e.target.value)} required disabled={!rosterPickOptions.length}>
+              <option value="">Select player…</option>
+              {rosterPickOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="keepers-label">Keeper 2 (optional, randomised)</span>
+            <select value={k2} onChange={(e) => setK2(e.target.value)} disabled={!rosterPickOptions.length}>
+              <option value="">— skip (no second keeper) —</option>
+              {rosterPickOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="keepers-label">Keeper 3 (optional, randomised)</span>
+            <select value={k3} onChange={(e) => setK3(e.target.value)} disabled={!rosterPickOptions.length}>
+              <option value="">— skip (no second keeper) —</option>
+              {rosterPickOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!sleeperUserId && <p className="keepers-hint keepers-hint--inline">Select yourself first to load your roster.</p>}
+          {sleeperUserId && !leagueLoading && rosterPickOptions.length === 0 && (
+            <p className="keepers-warn">No players found on your roster for this league/season.</p>
           )}
-          {lockedSleeperUserId && !leagueLoading && users.length > 0 && !users.some((u) => u.user_id === lockedSleeperUserId) && (
-            <p className="keepers-warn">
-              Your account isn’t in this season’s roster. Pick a different season or ask the commissioner to check your
-              Sleeper id.
-            </p>
-          )}
-        </label>
 
-        <p className="keepers-hint">
-          First load may take a few seconds while player names download from Sleeper.
-        </p>
-        <label>
-          <span className="keepers-label">Keeper 1 (guaranteed)</span>
-          <select value={k1} onChange={(e) => setK1(e.target.value)} required disabled={!rosterPickOptions.length}>
-            <option value="">Select player…</option>
-            {rosterPickOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="keepers-label">Keeper 2 (optional, randomised)</span>
-          <select value={k2} onChange={(e) => setK2(e.target.value)} disabled={!rosterPickOptions.length}>
-            <option value="">— skip (no second keeper) —</option>
-            {rosterPickOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="keepers-label">Keeper 3 (optional, randomised)</span>
-          <select value={k3} onChange={(e) => setK3(e.target.value)} disabled={!rosterPickOptions.length}>
-            <option value="">— skip (no second keeper) —</option>
-            {rosterPickOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!sleeperUserId && <p className="keepers-hint keepers-hint--inline">Select yourself first to load your roster.</p>}
-        {sleeperUserId && !leagueLoading && rosterPickOptions.length === 0 && (
-          <p className="keepers-warn">No players found on your roster for this league/season.</p>
-        )}
+          {formErr && <p className="keepers-err">{formErr}</p>}
+          {formMsg && <p className="keepers-ok">{formMsg}</p>}
 
-        {formErr && <p className="keepers-err">{formErr}</p>}
-        {formMsg && <p className="keepers-ok">{formMsg}</p>}
-
-        <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Save nomination'}
-        </button>
-      </form>
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? 'Saving…' : 'Save nomination'}
+          </button>
+        </form>
+      )}
 
       <section className="card keepers-list-card">
         <h2 className="keepers-list-title">All nominations</h2>
@@ -483,7 +495,7 @@ export default function Keepers() {
               the full list appears here after that time.
             </>
           ) : (
-            <>One row per manager per season. Re-saving updates the same row.</>
+            <>One row per manager per season. Nominations are locked after the reveal.</>
           )}
         </p>
         {nominationsHidden ? (
