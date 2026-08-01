@@ -127,9 +127,10 @@ export function positionFillsStarterNeed(pos, needs) {
 
 /**
  * Jitter ranks so two teams sharing a source still disagree slightly (FP-style variety).
+ * Keep sigma small — large jitter is what drops studs several rounds.
  * @param {object[]} players — share `ecr` rank field
  */
-export function jitterRankingBoard(players, rng = Math.random, sigma = 4) {
+export function jitterRankingBoard(players, rng = Math.random, sigma = 1.5) {
   const list = (players || [])
     .filter((p) => p && p.sleeper_id)
     .map((p) => {
@@ -167,30 +168,37 @@ export function assignTeamCheatSheets(userIds, boards, rng = Math.random) {
 
 /**
  * Score candidates the way FP-style sims describe: board rank + need + scarcity + light noise.
- * Lower score wins.
+ * Lower score wins. Need/scarcity are capped so they cannot yank elite ADP several rounds.
  */
 export function scoreFantasyProsCandidate(player, boardRank, needs, scarcityByPos, rng = Math.random) {
   const pos = normalizeDraftPos(player.pos);
-  let score = Number.isFinite(boardRank) ? boardRank : 9999;
+  const rank = Number.isFinite(boardRank) ? boardRank : 9999;
+  let score = rank;
+  let needAdj = 0;
 
   if (positionFillsStarterNeed(pos, needs)) {
-    if (pos === 'QB' || pos === 'DST') score -= 18;
-    else if ((needs[pos] || 0) > 0) score -= 14;
-    else score -= 8; // flex hole
+    if (pos === 'QB' || pos === 'DST') needAdj -= 6;
+    else if ((needs[pos] || 0) > 0) needAdj -= 5;
+    else needAdj -= 2.5; // flex hole
   } else {
     const already = needs?.counts?.[pos] || 0;
-    if (pos === 'QB' && already >= 1) score += 28;
-    else if (pos === 'DST' && already >= 1) score += 22;
-    else if (already >= 4) score += 12;
-    else if (already >= 3) score += 6;
+    if (pos === 'QB' && already >= 1) needAdj += 16;
+    else if (pos === 'DST' && already >= 1) needAdj += 12;
+    else if (already >= 4) needAdj += 6;
+    else if (already >= 3) needAdj += 3;
   }
 
   const scarce = scarcityByPos?.get(pos);
   if (scarce != null && scarce <= 3 && positionFillsStarterNeed(pos, needs)) {
-    score -= (4 - scarce) * 2.5;
+    needAdj -= (4 - scarce) * 1.0;
   }
 
-  score += (rng() - 0.5) * 3;
+  // Early board = stickier. Need can nudge, not rewrite the first few rounds.
+  const needScale = rank <= 12 ? 0.35 : rank <= 36 ? 0.65 : 1;
+  needAdj = Math.max(-5, Math.min(14, needAdj * needScale));
+  score += needAdj;
+
+  score += (rng() - 0.5) * 1;
   return score;
 }
 
@@ -206,12 +214,13 @@ function scarcityAmongTop(available, topN = 24) {
 
 /**
  * Weighted pick among the best-scored window (occasional reaches, like FP mocks).
+ * Narrow window + steep decay keeps picks close to the top of the sheet.
  * @param {object[]} scored — [{ player, score }], ascending score
  */
-export function weightedPickFromScored(scored, rng = Math.random, windowSize = 6) {
+export function weightedPickFromScored(scored, rng = Math.random, windowSize = 3) {
   if (!scored.length) return null;
   const window = scored.slice(0, Math.min(windowSize, scored.length));
-  const weights = window.map((_, i) => Math.pow(0.62, i));
+  const weights = window.map((_, i) => Math.pow(0.45, i));
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;
   for (let i = 0; i < window.length; i++) {
@@ -236,7 +245,7 @@ export function pickFantasyProsStyle({
   teamRoster,
   rng = Math.random,
   starterSlots = leagueFormat.starterSlots,
-  windowSize = 6,
+  windowSize = 3,
 }) {
   const available = (boardPlayers || []).filter(
     (p) => p?.sleeper_id && !takenIds.has(String(p.sleeper_id)),
