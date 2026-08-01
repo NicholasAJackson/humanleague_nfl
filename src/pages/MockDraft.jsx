@@ -9,7 +9,9 @@ import {
   buildPickQueue,
   draftPickRecord,
   combinedTakenIds,
-  pickBestAvailable,
+  pickFantasyProsStyle,
+  assignTeamCheatSheets,
+  teamRosterForNeeds,
   buildKeeperCostRoundPlacements,
   keeperCostRoundBlocksFromPlacements,
 } from '../lib/mockDraftEngine.js';
@@ -288,7 +290,12 @@ export default function MockDraft() {
   const [lookup, setLookup] = useState(null);
 
   const [rankings, setRankings] = useState({ status: 'idle' });
-  const [autopickStrategy, setAutopickStrategy] = useState('ecr');
+  /** Extra cheat-sheet sources for FantasyPros-style bots (Sleeper ADP is always included). */
+  const [rankingBoards, setRankingBoards] = useState([]);
+  /** Per-team assigned cheat sheets for the current mock run. */
+  const [teamBoards, setTeamBoards] = useState(null);
+  const teamBoardsRef = useRef(null);
+  teamBoardsRef.current = teamBoards;
   const [pickSeconds, setPickSeconds] = useState(() => {
     const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('mock-draft-pick-seconds') : null;
     const n = raw != null ? Number(raw) : DEFAULT_PICK_SECONDS;
@@ -333,14 +340,6 @@ export default function MockDraft() {
       document.body.style.overflow = prevOverflow;
     };
   }, [timedDraftActive]);
-
-  useEffect(() => {
-    try {
-      window.localStorage?.setItem('mock-draft-strategy', autopickStrategy);
-    } catch {
-      /* ignore */
-    }
-  }, [autopickStrategy]);
 
   useEffect(() => {
     try {
@@ -542,22 +541,55 @@ export default function MockDraft() {
   useEffect(() => {
     if (!config.leagueId) {
       setRankings({ status: 'idle' });
+      setRankingBoards([]);
       return;
     }
     let cancelled = false;
     setRankings({ status: 'loading' });
-    fetch('/api/rankings?page_type=sleeper-adp-half', { credentials: 'include' })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-        return data;
-      })
-      .then((data) => {
-        if (!cancelled) setRankings({ status: 'ready', data });
-      })
-      .catch((err) => {
-        if (!cancelled) setRankings({ status: 'error', message: err.message || String(err) });
+    setRankingBoards([]);
+
+    const loadBoard = async (pageType, id, label) => {
+      const res = await fetch(`/api/rankings?page_type=${encodeURIComponent(pageType)}`, {
+        credentials: 'include',
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return null;
+      const players = Array.isArray(data.players) ? data.players.filter((p) => p?.sleeper_id) : [];
+      if (!players.length) return null;
+      return { id, label, players, scrape_date: data.scrape_date || null, count: players.length };
+    };
+
+    (async () => {
+      try {
+        const [sleeper, dynasty, fp] = await Promise.all([
+          loadBoard('sleeper-adp-half', 'sleeper-adp', 'Sleeper ADP (Half-PPR)'),
+          loadBoard('redraft-overall', 'dynastyprocess-ecr', 'DynastyProcess redraft ECR'),
+          loadBoard('fp-ecr-half', 'fp-ecr', 'FantasyPros live ECR (Half-PPR)').catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (!sleeper) throw new Error('Could not load Sleeper ADP');
+        const boards = [sleeper, dynasty, fp].filter(Boolean);
+        setRankings({
+          status: 'ready',
+          data: {
+            page_type: 'sleeper-adp-half',
+            scrape_date: sleeper.scrape_date,
+            count: sleeper.count,
+            players: sleeper.players,
+            source: 'sleeper',
+            boards: boards.map((b) => ({ id: b.id, label: b.label, count: b.count })),
+          },
+        });
+        setRankingBoards(boards);
+        setTeamBoards(null);
+      } catch (err) {
+        if (!cancelled) {
+          setRankings({ status: 'error', message: err.message || String(err) });
+          setRankingBoards([]);
+        }
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -678,18 +710,30 @@ export default function MockDraft() {
     setPickCursor(0);
     setTimedDraftActive(false);
     setDraftPoolExhausted(false);
+    teamBoardsRef.current = null;
+    setTeamBoards(null);
   }, [sortedUsers, timedDraftActive]);
+
+  const ensureTeamBoards = useCallback(() => {
+    if (!slotOrderUserIds?.length || rankingBoards.length === 0) return null;
+    const assigned = assignTeamCheatSheets(slotOrderUserIds, rankingBoards);
+    teamBoardsRef.current = assigned;
+    setTeamBoards(assigned);
+    return assigned;
+  }, [slotOrderUserIds, rankingBoards]);
 
   const runAutoDraft = useCallback(() => {
     if (!slotOrderUserIds?.length || rankings.status !== 'ready' || timedDraftActive) return;
+    const boards = ensureTeamBoards();
     const picks = simulateSnakeDraft({
       slotOrderUserIds,
       users: sortedUsers,
       nominationByUserId,
       rankingsPlayers,
-      strategy: autopickStrategy,
       targetRosterSize: leagueFormat.draftRounds,
       keeperCostRoundsByUserId: keeperBlockedRoundsByUserId,
+      teamBoards: boards,
+      lookup,
     });
     setDraftPicks(picks);
     setPickQueue([]);
@@ -702,9 +746,10 @@ export default function MockDraft() {
     nominationByUserId,
     rankingsPlayers,
     rankings.status,
-    autopickStrategy,
     timedDraftActive,
     keeperBlockedRoundsByUserId,
+    ensureTeamBoards,
+    lookup,
   ]);
 
   const resetDraftOnly = useCallback(() => {
@@ -722,6 +767,7 @@ export default function MockDraft() {
 
   const startTimedDraft = useCallback(() => {
     if (!slotOrderUserIds?.length || rankings.status !== 'ready') return;
+    ensureTeamBoards();
     const queue = buildPickQueue(
       slotOrderUserIds,
       sortedUsers,
@@ -737,19 +783,32 @@ export default function MockDraft() {
     setTimedDraftActive(true);
     setDraftPoolExhausted(false);
     setPlayerSearch('');
-  }, [slotOrderUserIds, sortedUsers, nominationByUserId, rankings.status, keeperBlockedRoundsByUserId]);
+  }, [
+    slotOrderUserIds,
+    sortedUsers,
+    nominationByUserId,
+    rankings.status,
+    keeperBlockedRoundsByUserId,
+    ensureTeamBoards,
+  ]);
 
   const commitAutoPickForCursor = useCallback(
     (cursor, picksSnapshot) => {
       const meta = pickQueue[cursor];
       if (!meta) return null;
       const taken = combinedTakenIds(picksSnapshot, nominationByUserId);
-      const player = pickBestAvailable(rankingsPlayers, taken, autopickStrategy);
+      const sheet = teamBoardsRef.current?.get(meta.userId);
+      const boardPlayers = sheet?.players || rankingsPlayers;
+      const teamRoster = teamRosterForNeeds(meta.userId, picksSnapshot, nominationByUserId, lookup);
+      const player = pickFantasyProsStyle({
+        boardPlayers,
+        takenIds: taken,
+        teamRoster,
+      });
       if (!player) return null;
-      const record = draftPickRecord(meta, picksSnapshot.length + 1, player, 'auto');
-      return record;
+      return draftPickRecord(meta, picksSnapshot.length + 1, player, 'auto');
     },
-    [pickQueue, nominationByUserId, rankingsPlayers, autopickStrategy],
+    [pickQueue, nominationByUserId, rankingsPlayers, lookup],
   );
 
   const commitManualPickForCursor = useCallback(
@@ -1020,7 +1079,7 @@ export default function MockDraft() {
     return (
       <>
         <p className="mock-draft-live-pick-hint">
-          Click a row to draft that player. When time runs out, autopick uses Sleeper ADP.
+          Click a row to draft that player. When time runs out, autopick uses FantasyPros-style need + board logic.
         </p>
         <div className="mock-draft-picker__filters mock-draft-live-filters">
           <label className="mock-draft-picker__search">
@@ -1118,10 +1177,10 @@ export default function MockDraft() {
         <h1>Mock draft</h1>
         <p className="mock-draft-lead muted">
           Opponents pick instantly; your picks use the timer. Pool order is{' '}
-          <strong>Sleeper Half-PPR ADP</strong>. Locked-in keepers (K1 + ceremony second) fill the{' '}
-          <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers /
-          undrafted → round {leagueFormat.undraftedKeeperRound}) — every manager&apos;s keepers are shown on
-          the board.
+          <strong>Sleeper Half-PPR ADP</strong>. CPU teams use FantasyPros-style logic (random cheat sheet per team,
+          roster need, scarcity). Locked-in keepers (K1 + ceremony second) fill the{' '}
+          <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers / undrafted →
+          round {leagueFormat.undraftedKeeperRound}) — every manager&apos;s keepers are shown on the board.
         </p>
       </header>
 
@@ -1258,10 +1317,14 @@ export default function MockDraft() {
               <section className="card mock-draft-card mock-draft-simulator">
                 <h2 className="mock-draft-simulator__title">Draft room</h2>
                 <p className="muted mock-draft-simulator__lead">
-                  Player pool from Sleeper Half-PPR ADP. Only players with a Sleeper id appear in the pool.
+                  Player pool is Sleeper Half-PPR ADP. CPU / timer picks use FantasyPros-style logic: each team gets a
+                  random cheat sheet (Sleeper ADP
+                  {rankingBoards.some((b) => b.id === 'dynastyprocess-ecr') ? ', DynastyProcess ECR' : ''}
+                  {rankingBoards.some((b) => b.id === 'fp-ecr') ? ', FantasyPros live ECR' : ''}) with rank jitter, then
+                  scores by roster need and positional scarcity.
                 </p>
 
-                {rankings.status === 'loading' && <p className="muted">Loading Sleeper ADP…</p>}
+                {rankings.status === 'loading' && <p className="muted">Loading ranking boards…</p>}
                 {rankings.status === 'error' && (
                   <p className="mock-draft-simulator__err" role="alert">
                     Could not load ADP. {rankings.message}
@@ -1269,7 +1332,8 @@ export default function MockDraft() {
                 )}
                 {rankings.status === 'ready' && (
                   <p className="muted mock-draft-simulator__meta">
-                    {rankings.data.count?.toLocaleString?.() ?? rankingsPlayers.length} players (Sleeper ADP)
+                    Pool: {rankings.data.count?.toLocaleString?.() ?? rankingsPlayers.length} players ·{' '}
+                    {rankingBoards.length} bot cheat-sheet source{rankingBoards.length === 1 ? '' : 's'}
                     {rankings.data.scrape_date && (
                       <>
                         {' '}
@@ -1316,14 +1380,10 @@ export default function MockDraft() {
                     </select>
                   </label>
                   <label className="mock-draft-control">
-                    <span className="mock-draft-control__label">Autopick strategy (timer &amp; CPU)</span>
-                    <select
-                      value={autopickStrategy}
-                      onChange={(e) => setAutopickStrategy(e.target.value === 'owned' ? 'owned' : 'ecr')}
-                      disabled={rankings.status !== 'ready'}
-                    >
-                      <option value="ecr">ADP — best Sleeper ADP available</option>
-                    </select>
+                    <span className="mock-draft-control__label">CPU / timer picks</span>
+                    <p className="muted mock-draft-control__hint" style={{ margin: '0.35rem 0 0', maxWidth: '22rem' }}>
+                      FantasyPros-style: random board per team + roster need + scarcity (reassigned each mock).
+                    </p>
                   </label>
 
                   <div className="mock-draft-actions">

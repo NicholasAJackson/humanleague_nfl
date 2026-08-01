@@ -20,6 +20,8 @@ export const leagueFormat = {
   draftRounds: 14,
   /** Waivers / trades: sacrifice this round if kept (no draft slot in league startup). */
   undraftedKeeperRound: 14,
+  /** Starter slots for mock-draft need scoring (1 QB + flex, no kickers). */
+  starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1 },
 };
 
 /** Mock draft UI + `/mock-draft`: commissioners only in production; local dev allows session bypass (see AuthContext). */

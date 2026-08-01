@@ -62,7 +62,202 @@ export function remainingPicksPerUser(users, nominationByUserId, targetRosterSiz
   return m;
 }
 
+export function normalizeDraftPos(pos) {
+  const p = String(pos || '')
+    .trim()
+    .toUpperCase();
+  if (p === 'DEF') return 'DST';
+  return p;
+}
+
+/** Starter slots for need scoring — 1 QB + flex, no kickers (Human League shape). */
+export function getStarterSlots(slots = leagueFormat.starterSlots) {
+  return {
+    QB: Number(slots?.QB) || 1,
+    RB: Number(slots?.RB) || 2,
+    WR: Number(slots?.WR) || 2,
+    TE: Number(slots?.TE) || 1,
+    FLEX: Number(slots?.FLEX) || 1,
+    DST: Number(slots?.DST) || 1,
+  };
+}
+
 /**
+ * How many starter holes remain for each position (FLEX absorbs RB/WR/TE overflow).
+ * @returns {{ QB: number, RB: number, WR: number, TE: number, FLEX: number, DST: number, counts: Record<string, number> }}
+ */
+export function rosterStarterNeeds(rosterPlayers, starterSlots = leagueFormat.starterSlots) {
+  const slots = getStarterSlots(starterSlots);
+  const counts = { QB: 0, RB: 0, WR: 0, TE: 0, DST: 0 };
+  for (const p of rosterPlayers || []) {
+    const pos = normalizeDraftPos(p.pos || p.position);
+    if (counts[pos] != null) counts[pos] += 1;
+  }
+
+  const qbNeed = Math.max(0, slots.QB - counts.QB);
+  const dstNeed = Math.max(0, slots.DST - counts.DST);
+  const rbOverflow = Math.max(0, counts.RB - slots.RB);
+  const wrOverflow = Math.max(0, counts.WR - slots.WR);
+  const teOverflow = Math.max(0, counts.TE - slots.TE);
+  const flexFilled = Math.min(slots.FLEX, rbOverflow + wrOverflow + teOverflow);
+  const flexNeed = Math.max(0, slots.FLEX - flexFilled);
+
+  return {
+    QB: qbNeed,
+    RB: Math.max(0, slots.RB - counts.RB),
+    WR: Math.max(0, slots.WR - counts.WR),
+    TE: Math.max(0, slots.TE - counts.TE),
+    FLEX: flexNeed,
+    DST: dstNeed,
+    counts,
+  };
+}
+
+/** True if drafting this position still fills a starter (dedicated or FLEX). */
+export function positionFillsStarterNeed(pos, needs) {
+  const p = normalizeDraftPos(pos);
+  if (!needs) return false;
+  if (p === 'QB') return (needs.QB || 0) > 0;
+  if (p === 'DST') return (needs.DST || 0) > 0;
+  if (p === 'RB') return (needs.RB || 0) > 0 || (needs.FLEX || 0) > 0;
+  if (p === 'WR') return (needs.WR || 0) > 0 || (needs.FLEX || 0) > 0;
+  if (p === 'TE') return (needs.TE || 0) > 0 || (needs.FLEX || 0) > 0;
+  return false;
+}
+
+/**
+ * Jitter ranks so two teams sharing a source still disagree slightly (FP-style variety).
+ * @param {object[]} players — share `ecr` rank field
+ */
+export function jitterRankingBoard(players, rng = Math.random, sigma = 4) {
+  const list = (players || [])
+    .filter((p) => p && p.sleeper_id)
+    .map((p) => {
+      const base = Number(p.ecr);
+      const rank = Number.isFinite(base) ? base : 9999;
+      const noise = (rng() + rng() + rng() - 1.5) * (2 * sigma); // rough triangular
+      return { ...p, ecr: Math.max(0.1, rank + noise) };
+    });
+  list.sort((a, b) => (a.ecr ?? 99999) - (b.ecr ?? 99999));
+  return list;
+}
+
+/**
+ * Assign each team a cheat sheet from available boards (FantasyPros: random expert/ADP per bot).
+ * @param {string[]} userIds
+ * @param {Array<{ id: string, label: string, players: object[] }>} boards
+ * @returns {Map<string, { id: string, label: string, players: object[] }>}
+ */
+export function assignTeamCheatSheets(userIds, boards, rng = Math.random) {
+  const m = new Map();
+  const sources = (boards || []).filter((b) => Array.isArray(b.players) && b.players.length > 0);
+  if (!userIds?.length || !sources.length) return m;
+
+  for (const uid of userIds) {
+    if (!uid) continue;
+    const src = sources[Math.floor(rng() * sources.length)];
+    m.set(String(uid), {
+      id: src.id,
+      label: src.label,
+      players: jitterRankingBoard(src.players, rng),
+    });
+  }
+  return m;
+}
+
+/**
+ * Score candidates the way FP-style sims describe: board rank + need + scarcity + light noise.
+ * Lower score wins.
+ */
+export function scoreFantasyProsCandidate(player, boardRank, needs, scarcityByPos, rng = Math.random) {
+  const pos = normalizeDraftPos(player.pos);
+  let score = Number.isFinite(boardRank) ? boardRank : 9999;
+
+  if (positionFillsStarterNeed(pos, needs)) {
+    if (pos === 'QB' || pos === 'DST') score -= 18;
+    else if ((needs[pos] || 0) > 0) score -= 14;
+    else score -= 8; // flex hole
+  } else {
+    const already = needs?.counts?.[pos] || 0;
+    if (pos === 'QB' && already >= 1) score += 28;
+    else if (pos === 'DST' && already >= 1) score += 22;
+    else if (already >= 4) score += 12;
+    else if (already >= 3) score += 6;
+  }
+
+  const scarce = scarcityByPos?.get(pos);
+  if (scarce != null && scarce <= 3 && positionFillsStarterNeed(pos, needs)) {
+    score -= (4 - scarce) * 2.5;
+  }
+
+  score += (rng() - 0.5) * 3;
+  return score;
+}
+
+function scarcityAmongTop(available, topN = 24) {
+  const m = new Map();
+  const slice = available.slice(0, topN);
+  for (const p of slice) {
+    const pos = normalizeDraftPos(p.pos);
+    m.set(pos, (m.get(pos) || 0) + 1);
+  }
+  return m;
+}
+
+/**
+ * Weighted pick among the best-scored window (occasional reaches, like FP mocks).
+ * @param {object[]} scored — [{ player, score }], ascending score
+ */
+export function weightedPickFromScored(scored, rng = Math.random, windowSize = 6) {
+  if (!scored.length) return null;
+  const window = scored.slice(0, Math.min(windowSize, scored.length));
+  const weights = window.map((_, i) => Math.pow(0.62, i));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < window.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return window[i].player;
+  }
+  return window[window.length - 1].player;
+}
+
+/**
+ * FantasyPros-style autopick: team cheat sheet + roster needs + scarcity + soft random.
+ *
+ * @param {object} args
+ * @param {object[]} args.boardPlayers — this team's ranked cheat sheet (`ecr` ascending)
+ * @param {Set<string>} args.takenIds
+ * @param {object[]} args.teamRoster — keepers + picks so far `{ pos }`
+ * @param {() => number} [args.rng]
+ */
+export function pickFantasyProsStyle({
+  boardPlayers,
+  takenIds,
+  teamRoster,
+  rng = Math.random,
+  starterSlots = leagueFormat.starterSlots,
+  windowSize = 6,
+}) {
+  const available = (boardPlayers || []).filter(
+    (p) => p?.sleeper_id && !takenIds.has(String(p.sleeper_id)),
+  );
+  if (!available.length) return null;
+
+  const needs = rosterStarterNeeds(teamRoster, starterSlots);
+  const scarcity = scarcityAmongTop(available);
+  const scored = available.map((player, idx) => {
+    const boardRank = Number.isFinite(Number(player.ecr)) ? Number(player.ecr) : idx + 1;
+    return {
+      player,
+      score: scoreFantasyProsCandidate(player, boardRank, needs, scarcity, rng),
+    };
+  });
+  scored.sort((a, b) => a.score - b.score);
+  return weightedPickFromScored(scored, rng, windowSize);
+}
+
+/**
+ * @deprecated Prefer {@link pickFantasyProsStyle}. Kept for simple ADP-only fallbacks.
  * @param {'ecr' | 'owned'} strategy
  */
 export function pickBestAvailable(rankingsPlayers, takenIds, strategy) {
@@ -168,6 +363,29 @@ export function combinedTakenIds(draftPicks, nominationByUserId) {
   return taken;
 }
 
+/** Build `{ pos }` roster rows for need scoring (keepers via lookup + draft picks). */
+export function teamRosterForNeeds(userId, draftPicks, nominationByUserId, lookup) {
+  const out = [];
+  const nom = nominationByUserId?.get(userId);
+  for (const id of keeperPlayerIdsFromNomination(nom)) {
+    const meta = lookup?.get(id);
+    out.push({
+      sleeper_id: id,
+      pos: normalizeDraftPos(meta?.position || meta?.pos || ''),
+      name: meta?.name || id,
+    });
+  }
+  for (const p of draftPicks || []) {
+    if (p.userId !== userId) continue;
+    out.push({
+      sleeper_id: p.sleeperId,
+      pos: normalizeDraftPos(p.pos),
+      name: p.name,
+    });
+  }
+  return out;
+}
+
 /** Sleeper startup/snake pick map → round cost per keeper (undrafted → penalty round). */
 export function buildKeeperCostRoundPlacements(
   users,
@@ -213,6 +431,9 @@ export function simulateSnakeDraft({
   strategy,
   targetRosterSize = leagueFormat.draftRounds,
   keeperCostRoundsByUserId,
+  teamBoards,
+  lookup,
+  rng = Math.random,
 }) {
   const picks = [];
   if (!slotOrderUserIds?.length || !users?.length) return picks;
@@ -225,9 +446,26 @@ export function simulateSnakeDraft({
     keeperCostRoundsByUserId,
   );
   const taken = takenIdsFromKeeperNominations(nominationByUserId);
+  const boards =
+    teamBoards instanceof Map && teamBoards.size > 0
+      ? teamBoards
+      : assignTeamCheatSheets(
+          slotOrderUserIds,
+          [{ id: 'pool', label: 'Pool', players: rankingsPlayers || [] }],
+          rng,
+        );
 
   for (const meta of queue) {
-    const player = pickBestAvailable(rankingsPlayers, taken, strategy);
+    const sheet = boards.get(meta.userId);
+    const boardPlayers = sheet?.players || rankingsPlayers || [];
+    const teamRoster = teamRosterForNeeds(meta.userId, picks, nominationByUserId, lookup);
+    const player =
+      pickFantasyProsStyle({
+        boardPlayers,
+        takenIds: taken,
+        teamRoster,
+        rng,
+      }) || pickBestAvailable(boardPlayers, taken, strategy || 'ecr');
     if (!player) break;
     const sid = String(player.sleeper_id);
     taken.add(sid);
