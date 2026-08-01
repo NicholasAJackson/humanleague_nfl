@@ -6,9 +6,14 @@ const IDS_URL = 'https://raw.githubusercontent.com/dynastyprocess/data/master/fi
 const FP_API_BASE = 'https://api.fantasypros.com/public/v2/json';
 
 const ECR_PAGE_TYPES = new Set(['redraft-overall']);
-const FP_PAGE_TYPES = new Set(['fp-ecr-half', 'fp-adp-half']);
+const FP_PAGE_TYPES = new Set(['fp-ecr-half']);
+const SLEEPER_ADP_PAGE_TYPES = new Set(['sleeper-adp-half']);
 
-const ALLOWED_PAGE_TYPES = new Set([...ECR_PAGE_TYPES, ...FP_PAGE_TYPES]);
+const ALLOWED_PAGE_TYPES = new Set([
+  ...ECR_PAGE_TYPES,
+  ...FP_PAGE_TYPES,
+  ...SLEEPER_ADP_PAGE_TYPES,
+]);
 
 const DEFAULT_PAGE_TYPE = 'redraft-overall';
 
@@ -18,6 +23,12 @@ const STALE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Live FantasyPros consensus — shorter TTL so rankings stay fresher. */
 const FP_CACHE_TTL_MS = 30 * 60 * 1000;
 const FP_STALE_TTL_MS = 6 * 60 * 60 * 1000;
+/** Sleeper platform ADP — same cadence as live FP lists. */
+const SLEEPER_ADP_CACHE_TTL_MS = 30 * 60 * 1000;
+const SLEEPER_ADP_STALE_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** Sleeper fills missing ADP with ~999; keep only real draft-board values. */
+const SLEEPER_ADP_MAX = 500;
 
 let _cache = {
   fetchedAt: 0,
@@ -31,6 +42,11 @@ let _inflight = null;
 const _fpCache = new Map();
 /** @type {Map<string, Promise<object>>} */
 const _fpInflight = new Map();
+
+/** @type {{ fetchedAt: number, scrapeDate: string|null, players: object[], page_type?: string } | null} */
+let _sleeperAdpCache = null;
+/** @type {Promise<object> | null} */
+let _sleeperAdpInflight = null;
 
 /** Minimal RFC 4180 CSV parser. Handles quoted fields and embedded commas/newlines. */
 function parseCsv(text) {
@@ -274,9 +290,6 @@ async function fetchFantasyProsConsensus(pageType, idMap) {
     position: 'ALL',
     scoring: 'HALF',
   });
-  if (pageType === 'fp-adp-half') {
-    params.set('type', 'ADP');
-  }
 
   const url = `${FP_API_BASE}/nfl/${season}/consensus-rankings?${params}`;
   const res = await fetch(url, {
@@ -306,7 +319,7 @@ async function fetchFantasyProsConsensus(pageType, idMap) {
     players,
     source: 'fantasypros',
     scoring: data.scoring || 'HALF',
-    ranking_type: data.type || (pageType === 'fp-adp-half' ? 'ADP' : 'Preseason'),
+    ranking_type: data.type || 'Preseason',
   };
 }
 
@@ -339,6 +352,124 @@ async function getFantasyProsRankings(pageType) {
 
   _fpInflight.set(pageType, promise);
   return promise;
+}
+
+async function fetchSleeperNflSeason() {
+  const res = await fetch('https://api.sleeper.app/v1/state/nfl', {
+    headers: { 'user-agent': 'humanleague-nfl/rankings', accept: 'application/json' },
+  });
+  if (!res.ok) {
+    throw new Error(`Sleeper NFL state responded ${res.status}`);
+  }
+  const state = await res.json();
+  const season = String(state.league_season || state.season || '').trim();
+  if (!/^\d{4}$/.test(season)) {
+    throw new Error('Sleeper NFL state missing season');
+  }
+  return season;
+}
+
+function normalizeSleeperPos(raw) {
+  const pos = String(raw || '').trim().toUpperCase();
+  if (pos === 'DEF') return 'DST';
+  return pos;
+}
+
+function normalizeSleeperAdpPlayer(row) {
+  const stats = row && row.stats && typeof row.stats === 'object' ? row.stats : {};
+  const adp = toNum(stats.adp_half_ppr);
+  if (adp == null || adp <= 0 || adp >= SLEEPER_ADP_MAX) return null;
+
+  const player = row.player && typeof row.player === 'object' ? row.player : {};
+  const first = String(player.first_name || '').trim();
+  const last = String(player.last_name || '').trim();
+  const name = `${first} ${last}`.trim() || String(row.player_id || '');
+  const pos = normalizeSleeperPos(player.position || (player.fantasy_positions || [])[0]);
+  const sleeperId = row.player_id != null ? String(row.player_id) : null;
+
+  return {
+    ecr: adp,
+    sd: null,
+    best: null,
+    worst: null,
+    name,
+    pos,
+    team: String(player.team || row.team || '').trim(),
+    bye: null,
+    owned_avg: null,
+    rank_delta: null,
+    fp_id: null,
+    sleeper_id: sleeperId,
+  };
+}
+
+async function fetchSleeperAdpHalf() {
+  const season = await fetchSleeperNflSeason();
+  const params = new URLSearchParams({
+    season_type: 'regular',
+    order_by: 'adp_half_ppr',
+  });
+  for (const pos of ['QB', 'RB', 'WR', 'TE', 'DEF']) {
+    params.append('position[]', pos);
+  }
+
+  const url = `https://api.sleeper.com/projections/nfl/${season}?${params}`;
+  const res = await fetch(url, {
+    headers: { 'user-agent': 'humanleague-nfl/rankings', accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Sleeper projections responded ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
+  }
+
+  const raw = await res.json();
+  const rows = Array.isArray(raw) ? raw : [];
+  const players = rows.map(normalizeSleeperAdpPlayer).filter(Boolean);
+  players.sort((a, b) => a.ecr - b.ecr);
+
+  let latestMs = 0;
+  for (const row of rows) {
+    const ms = Number(row.updated_at || row.last_modified || 0);
+    if (Number.isFinite(ms) && ms > latestMs) latestMs = ms;
+  }
+
+  return {
+    page_type: 'sleeper-adp-half',
+    scrape_date: latestMs > 0 ? new Date(latestMs).toISOString() : null,
+    fetched_at: Date.now(),
+    count: players.length,
+    players,
+    source: 'sleeper',
+    scoring: 'HALF',
+    ranking_type: 'ADP',
+    season,
+  };
+}
+
+async function getSleeperAdpRankings() {
+  const now = Date.now();
+  if (_sleeperAdpCache && now - _sleeperAdpCache.fetched_at < SLEEPER_ADP_CACHE_TTL_MS) {
+    return _sleeperAdpCache;
+  }
+  if (_sleeperAdpInflight) return _sleeperAdpInflight;
+
+  const stale = _sleeperAdpCache;
+  _sleeperAdpInflight = (async () => {
+    try {
+      const next = await fetchSleeperAdpHalf();
+      _sleeperAdpCache = next;
+      return next;
+    } catch (err) {
+      if (stale && now - stale.fetched_at < SLEEPER_ADP_STALE_TTL_MS) {
+        console.warn('rankings: Sleeper ADP fetch failed, serving stale cache', err);
+        return stale;
+      }
+      throw err;
+    } finally {
+      _sleeperAdpInflight = null;
+    }
+  })();
+  return _sleeperAdpInflight;
 }
 
 export default async function handler(req, res) {
@@ -375,6 +506,15 @@ export default async function handler(req, res) {
         }
         throw err;
       }
+    }
+
+    if (SLEEPER_ADP_PAGE_TYPES.has(pageType)) {
+      const payload = await getSleeperAdpRankings();
+      res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
+      res.status(200);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.send(JSON.stringify(payload));
+      return;
     }
 
     const cache = await getCache();

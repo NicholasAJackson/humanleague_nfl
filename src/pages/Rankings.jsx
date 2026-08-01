@@ -15,14 +15,14 @@ import './Rankings.css';
 const VIEW_OPTIONS = [
   { value: 'redraft', label: 'Redraft rankings' },
   { value: 'fp-ecr', label: 'FP live ECR (Half-PPR)' },
-  { value: 'fp-adp', label: 'FP live ADP (Half-PPR)' },
+  { value: 'sleeper-adp', label: 'Sleeper ADP (Half-PPR)' },
   { value: 'keeper', label: 'Keeper: draft vs consensus' },
 ];
 
 /** Map UI view → /api/rankings?page_type= (keeper always uses DynastyProcess redraft). */
 function pageTypeForView(view) {
   if (view === 'fp-ecr') return 'fp-ecr-half';
-  if (view === 'fp-adp') return 'fp-adp-half';
+  if (view === 'sleeper-adp') return 'sleeper-adp-half';
   return 'redraft-overall';
 }
 
@@ -345,7 +345,7 @@ export default function Rankings() {
   }, [keeperFiltered, keeperSort]);
 
   const handleExportRedraft = () => {
-    const rankHeader = view === 'fp-adp' ? 'ADP' : 'ECR';
+    const rankHeader = view === 'sleeper-adp' ? 'ADP' : 'ECR';
     const headers = [rankHeader, 'Player', 'Pos', 'Team', 'Bye', 'SD', 'Best', 'Worst', 'Owned%'];
     const rows = redraftSorted.map((p) => [
       p.ecr ?? '',
@@ -359,8 +359,8 @@ export default function Rankings() {
       p.owned_avg != null ? Math.round(p.owned_avg) : '',
     ]);
     const filename =
-      view === 'fp-adp'
-        ? 'fp-adp-half-ppr.csv'
+      view === 'sleeper-adp'
+        ? 'sleeper-adp-half-ppr.csv'
         : view === 'fp-ecr'
           ? 'fp-ecr-half-ppr.csv'
           : 'redraft-rankings.csv';
@@ -395,9 +395,10 @@ export default function Rankings() {
   };
 
   const isKeeperView = view === 'keeper';
-  const isFpLiveView = view === 'fp-ecr' || view === 'fp-adp';
+  const isFpLiveView = view === 'fp-ecr';
+  const isSleeperAdpView = view === 'sleeper-adp';
   const isListView = !isKeeperView;
-  const rankColLabel = view === 'fp-adp' ? 'ADP' : 'ECR';
+  const rankColLabel = isSleeperAdpView ? 'ADP' : 'ECR';
   const ageDays = ecr.status === 'ready' ? ageInDays(ecr.data.scrape_date) : null;
   const isStale = ageDays != null && ageDays > 14;
 
@@ -415,7 +416,7 @@ export default function Rankings() {
         <h1>Expert rankings</h1>
         {ecr.status === 'ready' && isListView && ecr.data.source === 'fantasypros' && (
           <p className="rankings-source">
-            FantasyPros API · Half-PPR · {view === 'fp-adp' ? 'ADP' : 'redraft ECR'}
+            FantasyPros API · Half-PPR · redraft ECR
             {ecr.data.scrape_date && (
               <>
                 {' · '}as of <strong>{formatScrapeDate(ecr.data.scrape_date)}</strong>
@@ -423,7 +424,17 @@ export default function Rankings() {
             )}
           </p>
         )}
-        {ecr.status === 'ready' && (view === 'redraft' || isKeeperView) && ecr.data.source !== 'fantasypros' && (
+        {ecr.status === 'ready' && isListView && ecr.data.source === 'sleeper' && (
+          <p className="rankings-source">
+            Sleeper platform ADP · Half-PPR
+            {ecr.data.scrape_date && (
+              <>
+                {' · '}as of <strong>{formatScrapeDate(ecr.data.scrape_date)}</strong>
+              </>
+            )}
+          </p>
+        )}
+        {ecr.status === 'ready' && (view === 'redraft' || isKeeperView) && ecr.data.source !== 'fantasypros' && ecr.data.source !== 'sleeper' && (
           <p className="rankings-source">
             FantasyPros Expert Consensus (redraft overall), via{' '}
             <a href="https://github.com/dynastyprocess/data" target="_blank" rel="noreferrer">
@@ -531,6 +542,10 @@ export default function Rankings() {
               Live FantasyPros views need <code>FANTASYPROS_API_KEY</code> set on the server (Vercel
               env or local <code>.env</code>). DynastyProcess redraft still works without it.
             </p>
+          ) : isSleeperAdpView ? (
+            <p className="muted">
+              Sleeper ADP is loaded from Sleeper&apos;s projections feed. Try again in a minute.
+            </p>
           ) : (
             <p className="muted">
               The upstream data is mirrored on GitHub and refreshes weekly. Try again in a minute, or
@@ -603,8 +618,8 @@ export default function Rankings() {
                       onSort={toggleRedraftSort}
                       className="rankings-th rankings-th--rank rankings-th--sortable"
                       title={
-                        view === 'fp-adp'
-                          ? 'Average draft position (Half-PPR)'
+                        isSleeperAdpView
+                          ? 'Sleeper average draft position (Half-PPR)'
                           : 'Expert consensus rank'
                       }
                     >
@@ -680,9 +695,14 @@ export default function Rankings() {
                 </thead>
                 <tbody>
                   {redraftSorted.map((p) => (
-                    <tr key={p.fp_id || `${p.name}-${p.pos}`} className="rankings-row">
+                    <tr
+                      key={p.sleeper_id || p.fp_id || `${p.name}-${p.pos}`}
+                      className="rankings-row"
+                    >
                       <td className="rankings-td rankings-td--rank">
-                        <span className="rankings-rank">{p.ecr}</span>
+                        <span className="rankings-rank">
+                          {isSleeperAdpView ? fmtNum(p.ecr, 1) : p.ecr}
+                        </span>
                       </td>
                       <td className="rankings-td">
                         <span className="rankings-name">{p.name || '—'}</span>
