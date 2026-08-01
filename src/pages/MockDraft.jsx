@@ -324,14 +324,12 @@ export default function MockDraft() {
   const [playerSort, setPlayerSort] = useState({ key: 'ecr', dir: 'asc' });
 
   const [liveMobileDockTab, setLiveMobileDockTab] = useState('players');
-  const [liveDesktopSidebarTab, setLiveDesktopSidebarTab] = useState('chat');
 
   const rankingsPlayers = rankings.status === 'ready' ? rankings.data.players || [] : [];
 
   useEffect(() => {
     if (draftRoomOpen && timedDraftActive) {
       setLiveMobileDockTab('players');
-      setLiveDesktopSidebarTab('chat');
     }
   }, [draftRoomOpen, timedDraftActive]);
 
@@ -917,7 +915,6 @@ export default function MockDraft() {
       setTimedDraftActive(false);
       setBoardExpanded(false);
       setLiveMobileDockTab('roster');
-      setLiveDesktopSidebarTab('roster');
     }
   }, [timedDraftActive, pickCursor, pickQueue.length]);
 
@@ -1026,66 +1023,38 @@ export default function MockDraft() {
     return rows.sort((a, b) => a.round - b.round || a.playerId.localeCompare(b.playerId));
   }, [keeperCostByUserRound, myTeamUserId]);
 
-  function renderLiveAuxiliaryPanel(tabId) {
-    if (tabId === 'queue') {
-      return (
-        <div className="mock-draft-live-aux-panel">
-          <p className="mock-draft-live-aux-lead">
-            <strong>Queue</strong>
-          </p>
-          <p className="muted mock-draft-live-aux-copy">
-            Pick queue isn&apos;t built yet — tap or click a player in the board below to draft immediately when it&apos;s your turn.
-          </p>
-        </div>
-      );
-    }
-    if (tabId === 'roster') {
-      return (
-        <div className="mock-draft-live-aux-panel mock-draft-live-aux-panel--roster">
-          <p className="mock-draft-live-aux-lead">
-            <strong>Your roster</strong>{' '}
-            <span className="muted mock-draft-live-aux-sub">
-              ({labelByUserId.get(myTeamUserId) || 'your team'})
-            </span>
-          </p>
-          {myKeeperSlotsLive.length === 0 && myDraftedPicksLive.length === 0 ? (
-            <p className="muted mock-draft-live-aux-copy">No keepers or picks yet in this mock run.</p>
-          ) : (
-            <ul className="mock-draft-live-roster-list">
-              {myKeeperSlotsLive.map((k) => (
-                <li key={`keeper-${k.round}-${k.playerId}`}>
-                  <span className="tabular mock-draft-live-roster-slot">R{k.round}</span>
-                  <span className="mock-draft-live-roster-name">{fmtKeeperCostPlayer(k.playerId, lookup)}</span>
-                  <span className="mock-draft-live-roster-tag">keeper</span>
-                </li>
-              ))}
-              {myDraftedPicksLive.map((p) => (
-                <li key={`${p.overallPick}-${p.sleeperId}`}>
-                  <span className="tabular mock-draft-live-roster-slot">{p.overallPick}</span>
-                  <span className="mock-draft-live-roster-name">{p.name}</span>
-                  <span className="muted">{p.pos}</span>
-                  {p.pickKind === 'user' ? <span className="mock-draft-live-roster-tag">you</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      );
-    }
-    if (tabId === 'chat') {
-      return (
-        <div className="mock-draft-live-aux-panel mock-draft-live-aux-panel--chat">
-          <p className="mock-draft-live-chat-welcome-title">Welcome to mock draft</p>
-          <p className="muted mock-draft-live-aux-copy">
-            CPU teams take about a second per pick; your picks use the timer. Keeper costs appear on the board when startup
-            draft history is
-            loaded. When the draft finishes you stay in this room to review the board — expand it full screen anytime.
-            Leave with Done / Back.
-          </p>
-        </div>
-      );
-    }
-    return null;
+  function renderLiveRosterPanel() {
+    return (
+      <div className="mock-draft-live-aux-panel mock-draft-live-aux-panel--roster">
+        <p className="mock-draft-live-aux-lead">
+          <strong>Your roster</strong>{' '}
+          <span className="muted mock-draft-live-aux-sub">
+            ({labelByUserId.get(myTeamUserId) || 'your team'})
+          </span>
+        </p>
+        {myKeeperSlotsLive.length === 0 && myDraftedPicksLive.length === 0 ? (
+          <p className="muted mock-draft-live-aux-copy">No keepers or picks yet in this mock run.</p>
+        ) : (
+          <ul className="mock-draft-live-roster-list">
+            {myKeeperSlotsLive.map((k) => (
+              <li key={`keeper-${k.round}-${k.playerId}`}>
+                <span className="tabular mock-draft-live-roster-slot">R{k.round}</span>
+                <span className="mock-draft-live-roster-name">{fmtKeeperCostPlayer(k.playerId, lookup)}</span>
+                <span className="mock-draft-live-roster-tag">keeper</span>
+              </li>
+            ))}
+            {myDraftedPicksLive.map((p) => (
+              <li key={`${p.overallPick}-${p.sleeperId}`}>
+                <span className="tabular mock-draft-live-roster-slot">{p.overallPick}</span>
+                <span className="mock-draft-live-roster-name">{p.name}</span>
+                <span className="muted">{p.pos}</span>
+                {p.pickKind === 'user' ? <span className="mock-draft-live-roster-tag">you</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   }
 
   function renderLivePlayerWorkspace() {
@@ -1704,9 +1673,7 @@ export default function MockDraft() {
               <div className="mock-draft-live-mobile-dock" role="tablist" aria-label="Draft panels">
                 {[
                   ['players', draftComplete ? 'Results' : 'Players'],
-                  ['queue', 'Queue'],
                   ['roster', 'Roster'],
-                  ['chat', 'Chat'],
                 ].map(([id, label]) => (
                   <button
                     key={id}
@@ -1735,33 +1702,12 @@ export default function MockDraft() {
                   <div className="mock-draft-live-players-inner">{renderLivePlayerWorkspace()}</div>
                 </section>
 
-                <aside className="mock-draft-live-sidebar" aria-label="Queue, roster, and chat">
-                  <div className="mock-draft-live-sidebar-tabs" role="tablist">
-                    {[
-                      ['queue', 'Queue'],
-                      ['roster', 'Roster'],
-                      ['chat', 'Chat'],
-                    ].map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        role="tab"
-                        aria-selected={liveDesktopSidebarTab === id}
-                        className={
-                          'mock-draft-live-tab' +
-                          (liveDesktopSidebarTab === id ? ' mock-draft-live-tab--active' : '')
-                        }
-                        onClick={() => setLiveDesktopSidebarTab(id)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mock-draft-live-sidebar-body">{renderLiveAuxiliaryPanel(liveDesktopSidebarTab)}</div>
+                <aside className="mock-draft-live-sidebar" aria-label="Your roster">
+                  <div className="mock-draft-live-sidebar-body">{renderLiveRosterPanel()}</div>
                 </aside>
 
-                {liveMobileDockTab !== 'players' && (
-                  <div className="mock-draft-live-mobile-aux">{renderLiveAuxiliaryPanel(liveMobileDockTab)}</div>
+                {liveMobileDockTab === 'roster' && (
+                  <div className="mock-draft-live-mobile-aux">{renderLiveRosterPanel()}</div>
                 )}
               </div>
             </div>
