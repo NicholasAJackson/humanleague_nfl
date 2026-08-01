@@ -179,6 +179,31 @@
   color: #ecfdf5;
 }
 
+.keepers-locked-pending {
+  color: var(--color-text-dim);
+  font-weight: 500;
+}
+
+.keepers-lock-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: rgba(52, 211, 153, 0.1);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.22);
+}
+
+.keepers-lock-status--done {
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.22);
+}
+
 .keepers-mine-card {
   margin-bottom: var(--space-4);
   background: linear-gradient(

@@ -51,6 +51,48 @@ function fmtFinalKeepers(row, lookup) {
   return second ? `${k1} · ${second}` : k1;
 }
 
+/** Latest nomination per manager, preferring `sourceSeason` when provided. */
+function latestNominationsByUser(nominations, sourceSeason) {
+  const preferred = sourceSeason
+    ? nominations.filter((n) => n.source_season === sourceSeason)
+    : nominations;
+  const pool = preferred.length > 0 ? preferred : nominations;
+  const byUser = new Map();
+  for (const n of pool) {
+    const uid = n.sleeper_user_id;
+    if (!uid) continue;
+    const prev = byUser.get(uid);
+    if (!prev) {
+      byUser.set(uid, n);
+      continue;
+    }
+    const ta = Date.parse(n.updated_at || n.submitted_at || '') || 0;
+    const tb = Date.parse(prev.updated_at || prev.submitted_at || '') || 0;
+    if (ta >= tb) byUser.set(uid, n);
+  }
+  return byUser;
+}
+
+function nominationHasSecondSlots(n) {
+  if (!n) return false;
+  if (n.nomination_kind === 'freeform') return Boolean(n.k2_text && n.k3_text);
+  return Boolean(n.k2_player_id && n.k3_player_id);
+}
+
+function k1FieldsFromNomination(n) {
+  if (!n) return { k1_player_id: null, k1_text: null };
+  if (n.nomination_kind === 'freeform') {
+    return { k1_player_id: null, k1_text: n.k1_text || null };
+  }
+  return { k1_player_id: n.k1_player_id || null, k1_text: null };
+}
+
+function nominationHasK1(n) {
+  if (!n) return false;
+  if (n.nomination_kind === 'freeform') return Boolean(n.k1_text);
+  return Boolean(n.k1_player_id);
+}
+
 export default function Keepers() {
   const { user: authUser } = useAuth();
   const lockedSleeperUserId =
@@ -251,19 +293,67 @@ export default function Keepers() {
   const myLatest = myLatestForSeason || myLatestAny;
 
   const lockedInRows = useMemo(() => {
+    const sourceSeason = chain[0] ? String(chain[0].season) : seasonLabel || null;
     const carrySeason =
-      chain[0] && Number.isFinite(Number(chain[0].season))
-        ? String(Number(chain[0].season) + 1)
+      sourceSeason && Number.isFinite(Number(sourceSeason))
+        ? String(Number(sourceSeason) + 1)
         : null;
-    const rows = carrySeason
-      ? finals.filter((f) => f.carry_into_season === carrySeason)
-      : finals;
-    return [...rows].sort((a, b) => {
+
+    const finalsByUser = new Map();
+    for (const f of finals) {
+      if (carrySeason && f.carry_into_season !== carrySeason) continue;
+      finalsByUser.set(f.sleeper_user_id, f);
+    }
+
+    const nomsByUser = latestNominationsByUser(nominations, sourceSeason);
+    const userIds = new Set([...finalsByUser.keys(), ...nomsByUser.keys()]);
+
+    const rows = [];
+    for (const uid of userIds) {
+      const final = finalsByUser.get(uid) || null;
+      const nom = nomsByUser.get(uid) || null;
+
+      if (final) {
+        const complete = Boolean(
+          playerLabel(final.second_player_id, final.second_text, lookup) ||
+            final.second_player_id ||
+            final.second_text,
+        );
+        rows.push({
+          id: final.id,
+          sleeper_user_id: uid,
+          carry_into_season: final.carry_into_season,
+          k1_player_id: final.k1_player_id,
+          k1_text: final.k1_text,
+          second_player_id: final.second_player_id,
+          second_text: final.second_text,
+          status: complete ? 'complete' : 'k1_only',
+          awaitingCeremony: !complete && nominationHasSecondSlots(nom),
+        });
+        continue;
+      }
+
+      if (!nom || !nominationHasK1(nom)) continue;
+      const k1 = k1FieldsFromNomination(nom);
+      rows.push({
+        id: `nom-${nom.id}`,
+        sleeper_user_id: uid,
+        carry_into_season: carrySeason || String(Number(nom.source_season) + 1),
+        k1_player_id: k1.k1_player_id,
+        k1_text: k1.k1_text,
+        second_player_id: null,
+        second_text: null,
+        status: 'k1_only',
+        awaitingCeremony: nominationHasSecondSlots(nom),
+      });
+    }
+
+    return rows.sort((a, b) => {
       const na = (nameByUserId[a.sleeper_user_id] || a.sleeper_user_id || '').toLowerCase();
       const nb = (nameByUserId[b.sleeper_user_id] || b.sleeper_user_id || '').toLowerCase();
       return na.localeCompare(nb);
     });
-  }, [finals, chain, nameByUserId]);
+  }, [finals, nominations, chain, seasonLabel, nameByUserId, lookup]);
 
   const lockedInSeasonLabel = useMemo(() => {
     if (chain[0] && Number.isFinite(Number(chain[0].season))) {
@@ -411,14 +501,14 @@ export default function Keepers() {
         <h2 className="keepers-list-title">Locked in</h2>
         <p className="keepers-list-lead">
           {lockedInSeasonLabel
-            ? `Final keepers for the ${lockedInSeasonLabel} season — keeper 1 plus the ceremony winner (K2 or K3).`
-            : 'Final keepers after the ceremony — keeper 1 plus the winner of K2 / K3.'}
+            ? `Keeper 1 is locked from each nomination for ${lockedInSeasonLabel}. A second keeper appears once the commissioner records the ceremony.`
+            : 'Keeper 1 is locked from each nomination. A second keeper appears once the commissioner records the ceremony.'}
         </p>
-        {finalsLoading && <p className="muted">Loading…</p>}
-        {!finalsLoading && lockedInRows.length === 0 && (
-          <p className="muted">No locked-in keepers yet. The commissioner records them after the ceremony.</p>
+        {(finalsLoading || listLoading) && <p className="muted">Loading…</p>}
+        {!finalsLoading && !listLoading && lockedInRows.length === 0 && (
+          <p className="muted">No nominations yet — keeper 1 locks in here once managers submit.</p>
         )}
-        {!finalsLoading && lockedInRows.length > 0 && (
+        {!finalsLoading && !listLoading && lockedInRows.length > 0 && (
           <div className="keepers-table-wrap">
             <table className="keepers-table">
               <thead>
@@ -426,6 +516,7 @@ export default function Keepers() {
                   <th>Season</th>
                   <th>Manager</th>
                   <th>Keepers</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -433,7 +524,22 @@ export default function Keepers() {
                   <tr key={f.id}>
                     <td className="tabular">{f.carry_into_season}</td>
                     <td>{nameByUserId[f.sleeper_user_id] || '—'}</td>
-                    <td>{fmtFinalKeepers(f, lookup)}</td>
+                    <td>
+                      {fmtFinalKeepers(f, lookup)}
+                      {f.awaitingCeremony && (
+                        <span className="keepers-locked-pending"> · 2nd TBD</span>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          'keepers-lock-status' +
+                          (f.status === 'complete' ? ' keepers-lock-status--done' : '')
+                        }
+                      >
+                        {f.status === 'complete' ? 'Complete' : 'K1 locked'}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
