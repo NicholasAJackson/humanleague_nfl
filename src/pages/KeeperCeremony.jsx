@@ -5,23 +5,6 @@ import { config } from '../config.js';
 import { fetchUsers, getNflPlayersLookup } from '../lib/sleeper.js';
 import './KeeperCeremony.css';
 
-const HISTORY_KEY = 'keeper-ceremony:history';
-
-function cryptoId() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `id-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-}
-
-function loadHistory() {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 function playerLabel(id, text, lookup) {
   if (text) return text;
   if (!id) return null;
@@ -29,8 +12,7 @@ function playerLabel(id, text, lookup) {
   return meta ? `${meta.name} (${meta.position || '?'})` : id;
 }
 
-/** Latest nomination per manager that includes both K2 and K3. */
-function buildCeremonyCandidates(nominations, nameByUserId, lookup) {
+function latestNominationPerUser(nominations) {
   const byUser = new Map();
   for (const n of nominations) {
     const uid = n.sleeper_user_id;
@@ -54,58 +36,77 @@ function buildCeremonyCandidates(nominations, nameByUserId, lookup) {
       if (ta >= tb) byUser.set(uid, n);
     }
   }
+  return byUser;
+}
 
+/** Managers with K2 + K3 (need a ceremony flip). */
+function buildCeremonyCandidates(nominations, nameByUserId, lookup) {
   const out = [];
-  for (const n of byUser.values()) {
+  for (const n of latestNominationPerUser(nominations).values()) {
+    let k1Label;
     let k2Label;
     let k3Label;
-    let k1Label;
+    let k1Id = null;
     let k2Id = null;
     let k3Id = null;
+    let k1Text = null;
+    let k2Text = null;
+    let k3Text = null;
     if (n.nomination_kind === 'freeform') {
-      k1Label = n.k1_text || null;
-      k2Label = n.k2_text || null;
-      k3Label = n.k3_text || null;
+      k1Text = n.k1_text || null;
+      k2Text = n.k2_text || null;
+      k3Text = n.k3_text || null;
+      k1Label = k1Text;
+      k2Label = k2Text;
+      k3Label = k3Text;
     } else {
-      k1Label = playerLabel(n.k1_player_id, null, lookup);
-      k2Label = playerLabel(n.k2_player_id, null, lookup);
-      k3Label = playerLabel(n.k3_player_id, null, lookup);
+      k1Id = n.k1_player_id || null;
       k2Id = n.k2_player_id || null;
       k3Id = n.k3_player_id || null;
+      k1Label = playerLabel(k1Id, null, lookup);
+      k2Label = playerLabel(k2Id, null, lookup);
+      k3Label = playerLabel(k3Id, null, lookup);
     }
-    if (!k2Label || !k3Label) continue;
+    if (!k1Label || !k2Label || !k3Label) continue;
+    const sourceSeason = String(n.source_season);
+    const carryInto = Number.isFinite(Number(sourceSeason))
+      ? String(Number(sourceSeason) + 1)
+      : '';
     out.push({
       nominationId: n.id,
       sleeperUserId: n.sleeper_user_id,
-      sourceSeason: n.source_season,
+      sourceSeason,
+      carryIntoSeason: carryInto,
+      leagueIdSnapshot: n.league_id_snapshot || null,
       managerName: nameByUserId[n.sleeper_user_id] || n.sleeper_user_id,
-      k1Label,
-      k2: { id: k2Id || 'k2', name: k2Label, weight: 1, slot: 'k2' },
-      k3: { id: k3Id || 'k3', name: k3Label, weight: 1, slot: 'k3' },
+      k1: { playerId: k1Id, text: k1Text, label: k1Label },
+      k2: { id: k2Id || 'k2', playerId: k2Id, text: k2Text, name: k2Label, weight: 1, slot: 'k2' },
+      k3: { id: k3Id || 'k3', playerId: k3Id, text: k3Text, name: k3Label, weight: 1, slot: 'k3' },
     });
   }
-
   out.sort((a, b) => a.managerName.localeCompare(b.managerName));
   return out;
+}
+
+function fmtFinalKeepers(row, lookup) {
+  const k1 = playerLabel(row.k1_player_id, row.k1_text, lookup) || '—';
+  const second = playerLabel(row.second_player_id, row.second_text, lookup);
+  return second ? `${k1} · ${second}` : k1;
 }
 
 export default function KeeperCeremony() {
   const [nameByUserId, setNameByUserId] = useState({});
   const [lookup, setLookup] = useState(null);
   const [nominations, setNominations] = useState([]);
+  const [finals, setFinals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [history, setHistory] = useState(loadHistory);
+  const [chosenSlot, setChosenSlot] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState(null);
+  const [saveMsg, setSaveMsg] = useState(null);
   const [result, setResult] = useState(null);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
-    } catch {
-      /* ignore quota */
-    }
-  }, [history]);
 
   useEffect(() => {
     if (!config.leagueId) return;
@@ -139,25 +140,32 @@ export default function KeeperCeremony() {
     };
   }, []);
 
-  const loadNominations = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setLoadErr(null);
     try {
-      const res = await fetch('/api/keeper-nominations', { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `Failed (${res.status})`);
-      setNominations(data.nominations || []);
+      const [nomRes, finRes] = await Promise.all([
+        fetch('/api/keeper-nominations', { credentials: 'include' }),
+        fetch('/api/keeper-finals', { credentials: 'include' }),
+      ]);
+      const nomData = await nomRes.json().catch(() => ({}));
+      const finData = await finRes.json().catch(() => ({}));
+      if (!nomRes.ok) throw new Error(nomData.error || `Nominations failed (${nomRes.status})`);
+      if (!finRes.ok) throw new Error(finData.error || `Finals failed (${finRes.status})`);
+      setNominations(nomData.nominations || []);
+      setFinals(finData.finals || []);
     } catch (e) {
       setNominations([]);
-      setLoadErr(e.message || 'Could not load nominations');
+      setFinals([]);
+      setLoadErr(e.message || 'Could not load ceremony data');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadNominations();
-  }, [loadNominations]);
+    loadAll();
+  }, [loadAll]);
 
   const candidates = useMemo(
     () => buildCeremonyCandidates(nominations, nameByUserId, lookup),
@@ -169,56 +177,105 @@ export default function KeeperCeremony() {
     [candidates, selectedUserId],
   );
 
-  const priorSpin = useMemo(() => {
-    if (!selected) return null;
-    return (
-      history.find(
-        (h) => h.sleeperUserId === selected.sleeperUserId && h.sourceSeason === selected.sourceSeason,
-      ) || null
-    );
-  }, [history, selected]);
-
-  const spunUserIds = useMemo(() => {
+  const lockedKeySet = useMemo(() => {
     const set = new Set();
-    for (const h of history) {
-      if (h.sourceSeason && candidates.some((c) => c.sourceSeason === h.sourceSeason && c.sleeperUserId === h.sleeperUserId)) {
-        set.add(`${h.sleeperUserId}:${h.sourceSeason}`);
-      }
+    for (const f of finals) {
+      set.add(`${f.sleeper_user_id}:${f.carry_into_season}`);
     }
     return set;
-  }, [history, candidates]);
+  }, [finals]);
+
+  const existingFinal = useMemo(() => {
+    if (!selected) return null;
+    return (
+      finals.find(
+        (f) =>
+          f.sleeper_user_id === selected.sleeperUserId &&
+          f.carry_into_season === selected.carryIntoSeason,
+      ) || null
+    );
+  }, [finals, selected]);
 
   const wheelEntries = useMemo(() => {
     if (!selected) return [];
     return [selected.k2, selected.k3];
   }, [selected]);
 
-  function handleResult(entry) {
-    if (!selected || !entry) return;
-    const loser = entry.slot === 'k2' ? selected.k3 : selected.k2;
-    const record = {
-      id: cryptoId(),
-      sleeperUserId: selected.sleeperUserId,
-      sourceSeason: selected.sourceSeason,
-      managerName: selected.managerName,
+  function handleWheelResult(entry) {
+    if (!entry?.slot) return;
+    setChosenSlot(entry.slot);
+    setSaveErr(null);
+    setSaveMsg(null);
+    setResult({
+      managerName: selected?.managerName,
       winnerName: entry.name,
-      winnerSlot: entry.slot,
-      loserName: loser?.name || '',
-      k1Label: selected.k1Label,
-      at: Date.now(),
-    };
-    setResult(record);
-    setHistory((h) => {
-      const without = h.filter(
-        (x) => !(x.sleeperUserId === record.sleeperUserId && x.sourceSeason === record.sourceSeason),
-      );
-      return [record, ...without].slice(0, 50);
+      slot: entry.slot,
+      loserName: entry.slot === 'k2' ? selected?.k3.name : selected?.k2.name,
+      k1Label: selected?.k1.label,
     });
   }
 
-  function clearHistory() {
-    if (!confirm('Clear all ceremony results saved on this device?')) return;
-    setHistory([]);
+  async function lockIn() {
+    if (!selected || !chosenSlot) {
+      setSaveErr('Pick keeper 2 or 3 (spin the wheel or choose manually).');
+      return;
+    }
+    const second = chosenSlot === 'k2' ? selected.k2 : selected.k3;
+    setSaving(true);
+    setSaveErr(null);
+    setSaveMsg(null);
+    try {
+      const res = await fetch('/api/keeper-finals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          sleeper_user_id: selected.sleeperUserId,
+          source_season: selected.sourceSeason,
+          carry_into_season: selected.carryIntoSeason,
+          league_id_snapshot: selected.leagueIdSnapshot,
+          k1_player_id: selected.k1.playerId,
+          k1_text: selected.k1.text,
+          second_player_id: second.playerId,
+          second_text: second.text || (second.playerId ? null : second.name),
+          second_from_slot: chosenSlot,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setSaveMsg(`Locked in for ${selected.carryIntoSeason}: ${selected.k1.label} · ${second.name}`);
+      setFinals((prev) => {
+        const without = prev.filter(
+          (f) =>
+            !(
+              f.sleeper_user_id === data.final.sleeper_user_id &&
+              f.carry_into_season === data.final.carry_into_season
+            ),
+        );
+        return [data.final, ...without];
+      });
+    } catch (e) {
+      setSaveErr(e.message || 'Could not save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeFinal(id) {
+    if (!confirm('Remove this locked-in result from the database?')) return;
+    try {
+      const res = await fetch('/api/keeper-finals', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      setFinals((prev) => prev.filter((f) => f.id !== id));
+    } catch (e) {
+      setSaveErr(e.message || 'Could not delete');
+    }
   }
 
   if (!config.leagueId) {
@@ -235,7 +292,8 @@ export default function KeeperCeremony() {
         <span className="eyebrow">Commissioner</span>
         <h1>Keeper ceremony</h1>
         <p className="muted">
-          Spin for managers who nominated both keeper 2 and 3. Results save on this device only.
+          Spin or pick between K2 and K3, then lock the result into the database. Locked keepers appear on{' '}
+          <strong>/keepers</strong> under “Locked in”.
         </p>
       </header>
 
@@ -246,19 +304,26 @@ export default function KeeperCeremony() {
             value={selectedUserId}
             onChange={(e) => {
               setSelectedUserId(e.target.value);
+              setChosenSlot('');
               setResult(null);
+              setSaveErr(null);
+              setSaveMsg(null);
             }}
             disabled={loading || candidates.length === 0}
           >
             <option value="">
-              {loading ? 'Loading nominations…' : candidates.length === 0 ? 'No K2/K3 nominations' : 'Select a manager…'}
+              {loading
+                ? 'Loading nominations…'
+                : candidates.length === 0
+                  ? 'No K2/K3 nominations'
+                  : 'Select a manager…'}
             </option>
             {candidates.map((c) => {
-              const done = spunUserIds.has(`${c.sleeperUserId}:${c.sourceSeason}`);
+              const done = lockedKeySet.has(`${c.sleeperUserId}:${c.carryIntoSeason}`);
               return (
                 <option key={c.sleeperUserId} value={c.sleeperUserId}>
                   {done ? '✓ ' : ''}
-                  {c.managerName} · {c.sourceSeason}
+                  {c.managerName} · into {c.carryIntoSeason}
                 </option>
               );
             })}
@@ -277,7 +342,7 @@ export default function KeeperCeremony() {
           <div className="ceremony-context">
             <p className="ceremony-context__k1">
               <span className="ceremony-label">Keeper 1 (guaranteed)</span>
-              <strong>{selected.k1Label || '—'}</strong>
+              <strong>{selected.k1.label}</strong>
             </p>
             <div className="ceremony-context__pair">
               <div>
@@ -289,41 +354,85 @@ export default function KeeperCeremony() {
                 <strong>{selected.k3.name}</strong>
               </div>
             </div>
-            {priorSpin && (
+
+            <fieldset className="ceremony-slot-pick">
+              <legend className="ceremony-label">Ceremony winner</legend>
+              <label className="ceremony-radio">
+                <input
+                  type="radio"
+                  name="ceremony-slot"
+                  value="k2"
+                  checked={chosenSlot === 'k2'}
+                  onChange={() => setChosenSlot('k2')}
+                />
+                <span>K2 — {selected.k2.name}</span>
+              </label>
+              <label className="ceremony-radio">
+                <input
+                  type="radio"
+                  name="ceremony-slot"
+                  value="k3"
+                  checked={chosenSlot === 'k3'}
+                  onChange={() => setChosenSlot('k3')}
+                />
+                <span>K3 — {selected.k3.name}</span>
+              </label>
+            </fieldset>
+
+            {existingFinal && (
               <p className="ceremony-prior" role="status">
-                Already spun: <strong>{priorSpin.winnerName}</strong> won
-                {priorSpin.at ? ` · ${new Date(priorSpin.at).toLocaleString()}` : ''}. Spin again to overwrite.
+                Already locked in DB:{' '}
+                <strong>{fmtFinalKeepers(existingFinal, lookup)}</strong>
+                {existingFinal.updated_at
+                  ? ` · ${new Date(existingFinal.updated_at).toLocaleString()}`
+                  : ''}
+                . Saving again overwrites.
               </p>
             )}
+
+            {saveErr && <p className="ceremony-err">{saveErr}</p>}
+            {saveMsg && <p className="ceremony-ok">{saveMsg}</p>}
+
+            <button
+              type="button"
+              className="btn btn-primary ceremony-lock-btn"
+              disabled={saving || !chosenSlot}
+              onClick={lockIn}
+            >
+              {saving ? 'Saving…' : `Lock in for ${selected.carryIntoSeason}`}
+            </button>
           </div>
         )}
       </section>
 
       {selected && (
         <section className="ceremony-wheel-block" aria-label="K2 vs K3 spin">
-          <Wheel key={selected.sleeperUserId} entries={wheelEntries} onResult={handleResult} />
+          <p className="ceremony-wheel-hint muted">Optional: spin to choose, then lock in above.</p>
+          <Wheel key={selected.sleeperUserId} entries={wheelEntries} onResult={handleWheelResult} />
         </section>
       )}
 
-      {history.length > 0 && (
+      {finals.length > 0 && (
         <section className="card ceremony-history-card">
           <div className="ceremony-history-head">
-            <h2 className="ceremony-history-title">Results</h2>
-            <button type="button" className="btn btn-ghost" onClick={clearHistory}>
-              Clear
-            </button>
+            <h2 className="ceremony-history-title">Locked in (database)</h2>
           </div>
           <ul className="ceremony-history">
-            {history.map((h) => (
-              <li key={h.id}>
+            {finals.map((f) => (
+              <li key={f.id}>
                 <div className="ceremony-history__main">
-                  <span className="ceremony-history__manager">{h.managerName}</span>
-                  <span className="ceremony-history__winner">{h.winnerName}</span>
+                  <span className="ceremony-history__manager">
+                    {nameByUserId[f.sleeper_user_id] || f.sleeper_user_id}
+                  </span>
+                  <span className="ceremony-history__winner">{fmtFinalKeepers(f, lookup)}</span>
                 </div>
                 <div className="ceremony-history__meta">
-                  <span>beat {h.loserName}</span>
-                  <span>{h.sourceSeason}</span>
-                  <span>{h.at ? new Date(h.at).toLocaleString() : ''}</span>
+                  <span>Into {f.carry_into_season}</span>
+                  {f.second_from_slot && <span>via {f.second_from_slot.toUpperCase()}</span>}
+                  <span>{f.updated_at ? new Date(f.updated_at).toLocaleString() : ''}</span>
+                  <button type="button" className="btn btn-ghost ceremony-history__remove" onClick={() => removeFinal(f.id)}>
+                    Remove
+                  </button>
                 </div>
               </li>
             ))}
@@ -334,10 +443,10 @@ export default function KeeperCeremony() {
       <BottomSheet
         open={!!result}
         onClose={() => setResult(null)}
-        title="Second keeper"
+        title="Wheel result"
         footer={
           <button type="button" className="btn btn-primary" onClick={() => setResult(null)}>
-            Done
+            Use this pick
           </button>
         }
       >
@@ -347,8 +456,9 @@ export default function KeeperCeremony() {
             <p className="ceremony-winner__name">{result.winnerName}</p>
             <p className="muted">
               Beats {result.loserName}
-              {result.k1Label ? ` · keeps with ${result.k1Label}` : ''}
+              {result.k1Label ? ` · locks with ${result.k1Label}` : ''}
             </p>
+            <p className="muted">Confirm with “Lock in” above to write to the database.</p>
           </div>
         )}
       </BottomSheet>

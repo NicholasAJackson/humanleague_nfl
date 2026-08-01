@@ -164,6 +164,21 @@
   box-shadow: var(--shadow-sm);
 }
 
+.keepers-locked-in-card {
+  margin-bottom: var(--space-4);
+  background: linear-gradient(
+    165deg,
+    rgba(20, 55, 48, 0.55) 0%,
+    rgba(15, 32, 40, 0.75) 100%
+  );
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  box-shadow: var(--shadow-sm);
+}
+
+.keepers-locked-in-card .keepers-list-title {
+  color: #ecfdf5;
+}
+
 .keepers-mine-card {
   margin-bottom: var(--space-4);
   background: linear-gradient(

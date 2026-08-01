@@ -90,6 +90,66 @@
   font-weight: 600;
 }
 
+.ceremony-slot-pick {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ceremony-slot-pick legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.ceremony-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  background: rgba(15, 22, 40, 0.45);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--color-text);
+}
+
+.ceremony-radio:has(input:checked) {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.ceremony-radio input {
+  margin-top: 2px;
+  accent-color: #0ea5e9;
+}
+
+.ceremony-lock-btn {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 12px;
+}
+
+.ceremony-ok {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 12px;
+  font-size: var(--fs-sm);
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.ceremony-wheel-hint {
+  margin: 0 0 var(--space-3);
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+
 .ceremony-wheel-block {
   margin-top: var(--space-2);
 }
@@ -116,12 +176,6 @@
   font-size: 1.05rem;
   font-weight: 650;
   letter-spacing: -0.02em;
-}
-
-.ceremony-history-head .btn {
-  margin-left: auto;
-  min-height: 36px;
-  font-size: var(--fs-xs);
 }
 
 .ceremony-history {
@@ -168,8 +222,16 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
+  align-items: center;
   font-size: 12px;
   color: var(--color-text-dim);
+}
+
+.ceremony-history__remove {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+  margin-left: auto;
 }
 
 .ceremony-winner {

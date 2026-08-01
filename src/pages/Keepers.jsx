@@ -37,6 +37,20 @@ function fmtNominationRow(n, lookup) {
     .join(' · ');
 }
 
+function playerLabel(id, text, lookup) {
+  if (text) return text;
+  if (!id) return null;
+  if (!lookup) return id;
+  const x = lookup.get(id);
+  return x ? `${x.name} (${x.position || '?'})` : id;
+}
+
+function fmtFinalKeepers(row, lookup) {
+  const k1 = playerLabel(row.k1_player_id, row.k1_text, lookup) || '—';
+  const second = playerLabel(row.second_player_id, row.second_text, lookup);
+  return second ? `${k1} · ${second}` : k1;
+}
+
 export default function Keepers() {
   const { user: authUser } = useAuth();
   const lockedSleeperUserId =
@@ -62,7 +76,9 @@ export default function Keepers() {
 
   const [nameByUserId, setNameByUserId] = useState({});
   const [nominations, setNominations] = useState([]);
+  const [finals, setFinals] = useState([]);
   const [listLoading, setListLoading] = useState(true);
+  const [finalsLoading, setFinalsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState(null);
   const [formErr, setFormErr] = useState(null);
@@ -153,6 +169,28 @@ export default function Keepers() {
   }, [loadNominations]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFinalsLoading(true);
+      try {
+        const res = await fetch('/api/keeper-finals', { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          if (res.ok) setFinals(data.finals || []);
+          else setFinals([]);
+        }
+      } catch {
+        if (!cancelled) setFinals([]);
+      } finally {
+        if (!cancelled) setFinalsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (lockedSleeperUserId && sleeperUserId !== lockedSleeperUserId) {
       setSleeperUserId(lockedSleeperUserId);
     }
@@ -211,6 +249,28 @@ export default function Keepers() {
   const myLatestAny = useMemo(() => myNominations[0] || null, [myNominations]);
 
   const myLatest = myLatestForSeason || myLatestAny;
+
+  const lockedInRows = useMemo(() => {
+    const carrySeason =
+      chain[0] && Number.isFinite(Number(chain[0].season))
+        ? String(Number(chain[0].season) + 1)
+        : null;
+    const rows = carrySeason
+      ? finals.filter((f) => f.carry_into_season === carrySeason)
+      : finals;
+    return [...rows].sort((a, b) => {
+      const na = (nameByUserId[a.sleeper_user_id] || a.sleeper_user_id || '').toLowerCase();
+      const nb = (nameByUserId[b.sleeper_user_id] || b.sleeper_user_id || '').toLowerCase();
+      return na.localeCompare(nb);
+    });
+  }, [finals, chain, nameByUserId]);
+
+  const lockedInSeasonLabel = useMemo(() => {
+    if (chain[0] && Number.isFinite(Number(chain[0].season))) {
+      return String(Number(chain[0].season) + 1);
+    }
+    return lockedInRows[0]?.carry_into_season || null;
+  }, [chain, lockedInRows]);
 
   const rosterPickOptions = useMemo(() => {
     if (!sleeperUserId || !rosters.length) return [];
@@ -346,6 +406,41 @@ export default function Keepers() {
           No linked league seasons found — roster source dropdown will be empty until the league chain resolves.
         </div>
       )}
+
+      <section className="card keepers-locked-in-card">
+        <h2 className="keepers-list-title">Locked in</h2>
+        <p className="keepers-list-lead">
+          {lockedInSeasonLabel
+            ? `Final keepers for the ${lockedInSeasonLabel} season — keeper 1 plus the ceremony winner (K2 or K3).`
+            : 'Final keepers after the ceremony — keeper 1 plus the winner of K2 / K3.'}
+        </p>
+        {finalsLoading && <p className="muted">Loading…</p>}
+        {!finalsLoading && lockedInRows.length === 0 && (
+          <p className="muted">No locked-in keepers yet. The commissioner records them after the ceremony.</p>
+        )}
+        {!finalsLoading && lockedInRows.length > 0 && (
+          <div className="keepers-table-wrap">
+            <table className="keepers-table">
+              <thead>
+                <tr>
+                  <th>Season</th>
+                  <th>Manager</th>
+                  <th>Keepers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lockedInRows.map((f) => (
+                  <tr key={f.id}>
+                    <td className="tabular">{f.carry_into_season}</td>
+                    <td>{nameByUserId[f.sleeper_user_id] || '—'}</td>
+                    <td>{fmtFinalKeepers(f, lookup)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {sleeperUserId && !listLoading && (
         <section className="card keepers-mine-card" aria-live="polite">
