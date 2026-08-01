@@ -94,7 +94,6 @@ function pickCellForRoundTeam(draftPicks, round, teamUserId) {
 }
 
 function fmtKeeperCostPlayer(pid, lookup) {
-  if (pid === '__anon__') return 'Keeper';
   const x = lookup?.get(pid);
   return x ? `${x.name} (${x.position || '?'})` : pid;
 }
@@ -578,12 +577,8 @@ export default function MockDraft() {
     });
 
     if (finalsForSeason.length > 0) {
-      let pool = finalsForSeason;
-      if (nominationsHidden && !isCommissioner) {
-        if (!lockedSleeperUserId) return [];
-        pool = finalsForSeason.filter((f) => f.sleeper_user_id === lockedSleeperUserId);
-      }
-      return pool.map(finalToMockNomination).filter(Boolean);
+      // Locked-in keepers are league-visible — show every manager on the mock board.
+      return finalsForSeason.map(finalToMockNomination).filter(Boolean);
     }
 
     // Fallback before finals exist: nominations (may include K2+K3 candidates).
@@ -654,28 +649,6 @@ export default function MockDraft() {
       leagueFormat.undraftedKeeperRound,
     );
   }, [keeperCostDraft, sortedUsers, nominationByUserId]);
-
-  /**
-   * Board display: when you draft as a manager, only that team's locked-in keepers are named
-   * in their cost-round slots. Other teams still consume keeper rounds in the sim (blocked),
-   * but show an anonymous keeper marker so those cells aren't empty.
-   */
-  const boardKeeperCostByUserRound = useMemo(() => {
-    if (!myTeamUserId) return new Map();
-    const out = new Map();
-    for (const [uid, byRound] of keeperCostByUserRound.entries()) {
-      if (uid === myTeamUserId) {
-        out.set(uid, byRound);
-        continue;
-      }
-      const anon = new Map();
-      for (const [round, ids] of byRound.entries()) {
-        if (ids?.length) anon.set(round, ['__anon__']);
-      }
-      if (anon.size) out.set(uid, anon);
-    }
-    return out;
-  }, [keeperCostByUserRound, myTeamUserId]);
 
   const keeperBlockedRoundsByUserId = useMemo(
     () => keeperCostRoundBlocksFromPlacements(keeperCostByUserRound),
@@ -1147,8 +1120,8 @@ export default function MockDraft() {
           Opponents pick instantly; your picks use the timer. Pool order is{' '}
           <strong>Sleeper Half-PPR ADP</strong>. Locked-in keepers (K1 + ceremony second) fill the{' '}
           <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers /
-          undrafted → round {leagueFormat.undraftedKeeperRound}). Select who you draft as to see{' '}
-          <strong>your</strong> keepers named on the board.
+          undrafted → round {leagueFormat.undraftedKeeperRound}) — every manager&apos;s keepers are shown on
+          the board.
         </p>
       </header>
 
@@ -1427,7 +1400,7 @@ export default function MockDraft() {
                     slotOrderUserIds={slotOrderUserIds}
                     boardMaxRound={boardMaxRound}
                     draftPicks={draftPicks}
-                    keeperCostByUserRound={boardKeeperCostByUserRound}
+                    keeperCostByUserRound={keeperCostByUserRound}
                     lookup={lookup}
                     timedDraftActive={false}
                     currentPickMeta={currentPickMeta}
@@ -1563,7 +1536,7 @@ export default function MockDraft() {
                 slotOrderUserIds={slotOrderUserIds}
                 boardMaxRound={boardMaxRound}
                 draftPicks={draftPicks}
-                keeperCostByUserRound={boardKeeperCostByUserRound}
+                keeperCostByUserRound={keeperCostByUserRound}
                 lookup={lookup}
                 timedDraftActive={timedDraftActive}
                 currentPickMeta={currentPickMeta}
