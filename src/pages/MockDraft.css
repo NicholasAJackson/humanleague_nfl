@@ -682,6 +682,22 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.mock-draft-live-bar__expand {
+  padding: 0.35rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e0f2fe;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.85);
+  white-space: nowrap;
+}
+
+.mock-draft-live-bar__expand:hover {
+  background: rgba(51, 65, 85, 0.95);
 }
 
 .mock-draft-live-bar__timer {
@@ -710,6 +726,54 @@
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.18);
+  gap: 0.3rem;
+}
+
+.mock-draft-live-board-shell__toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.15rem;
+}
+
+.mock-draft-live-board-shell__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mock-draft-live-board-shell__expand {
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #99f6e4;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  background: rgba(13, 148, 136, 0.12);
+}
+
+.mock-draft-live-board-shell__expand:hover {
+  background: rgba(45, 212, 191, 0.15);
+}
+
+.mock-draft-live-board-shell--expanded {
+  flex: 1;
+  max-height: none;
+}
+
+.mock-draft-live-board-shell--expanded .mock-draft-board-wrap--compact {
+  flex: 1;
+}
+
+.mock-draft-live-board-shell--expanded .mock-draft-board-wrap--compact .mock-draft-board-scroll {
+  max-height: none;
+}
+
+.mock-draft-live-overlay__inner--board-expanded {
+  gap: 0.45rem;
 }
 
 @media (min-width: 961px) {
@@ -722,6 +786,34 @@
   .mock-draft-live-board-shell {
     max-height: min(44vh, 300px);
   }
+}
+
+.mock-draft-live-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.35rem 0.15rem;
+  max-width: 28rem;
+}
+
+.mock-draft-live-results__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #86efac;
+}
+
+.mock-draft-live-results__copy {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.mock-draft-live-results__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .mock-draft-live-workspace {

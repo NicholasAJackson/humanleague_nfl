@@ -308,6 +308,9 @@ export default function MockDraft() {
   draftPicksRef.current = draftPicks;
 
   const [timedDraftActive, setTimedDraftActive] = useState(false);
+  /** Keeps the live room open after the last pick so results stay visible. */
+  const [draftRoomOpen, setDraftRoomOpen] = useState(false);
+  const [boardExpanded, setBoardExpanded] = useState(false);
   const [pickQueue, setPickQueue] = useState([]);
   const [pickCursor, setPickCursor] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_PICK_SECONDS);
@@ -326,20 +329,20 @@ export default function MockDraft() {
   const rankingsPlayers = rankings.status === 'ready' ? rankings.data.players || [] : [];
 
   useEffect(() => {
-    if (timedDraftActive) {
+    if (draftRoomOpen && timedDraftActive) {
       setLiveMobileDockTab('players');
       setLiveDesktopSidebarTab('chat');
     }
-  }, [timedDraftActive]);
+  }, [draftRoomOpen, timedDraftActive]);
 
   useEffect(() => {
-    if (!timedDraftActive) return undefined;
+    if (!draftRoomOpen) return undefined;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = prevOverflow;
     };
-  }, [timedDraftActive]);
+  }, [draftRoomOpen]);
 
   useEffect(() => {
     try {
@@ -759,11 +762,30 @@ export default function MockDraft() {
   }, [timedDraftActive]);
 
   const leaveDraftRoom = useCallback(() => {
+    setDraftRoomOpen(false);
+    setBoardExpanded(false);
     setTimedDraftActive(false);
     setPickQueue([]);
     setPickCursor(0);
     setDraftPoolExhausted(false);
   }, []);
+
+  const leaveDraftRoomRef = useRef(leaveDraftRoom);
+  leaveDraftRoomRef.current = leaveDraftRoom;
+
+  useEffect(() => {
+    if (!draftRoomOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (boardExpanded) {
+        setBoardExpanded(false);
+        return;
+      }
+      leaveDraftRoomRef.current?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [draftRoomOpen, boardExpanded]);
 
   const startTimedDraft = useCallback(() => {
     if (!slotOrderUserIds?.length || rankings.status !== 'ready') return;
@@ -780,6 +802,8 @@ export default function MockDraft() {
     draftPicksRef.current = [];
     setPickQueue(queue);
     setPickCursor(0);
+    setBoardExpanded(false);
+    setDraftRoomOpen(true);
     setTimedDraftActive(true);
     setDraftPoolExhausted(false);
     setPlayerSearch('');
@@ -891,12 +915,16 @@ export default function MockDraft() {
   useEffect(() => {
     if (timedDraftActive && pickCursor >= pickQueue.length && pickQueue.length > 0) {
       setTimedDraftActive(false);
+      setBoardExpanded(false);
+      setLiveMobileDockTab('roster');
+      setLiveDesktopSidebarTab('roster');
     }
   }, [timedDraftActive, pickCursor, pickQueue.length]);
 
+  const draftComplete = pickQueue.length > 0 && pickCursor >= pickQueue.length;
   const currentPickMeta = pickQueue[pickCursor] || null;
   const isMyPick =
-    Boolean(currentPickMeta && myTeamUserId && currentPickMeta.userId === myTeamUserId);
+    Boolean(currentPickMeta && myTeamUserId && currentPickMeta.userId === myTeamUserId && !draftComplete);
 
   const takenIdsDisplay = useMemo(
     () => combinedTakenIds(draftPicks, nominationByUserId),
@@ -1051,7 +1079,8 @@ export default function MockDraft() {
           <p className="muted mock-draft-live-aux-copy">
             CPU teams take about a second per pick; your picks use the timer. Keeper costs appear on the board when startup
             draft history is
-            loaded. Leave anytime — your finished picks stay listed on the page behind this overlay.
+            loaded. When the draft finishes you stay in this room to review the board — expand it full screen anytime.
+            Leave with Done / Back.
           </p>
         </div>
       );
@@ -1060,10 +1089,29 @@ export default function MockDraft() {
   }
 
   function renderLivePlayerWorkspace() {
+    if (draftComplete) {
+      return (
+        <div className="mock-draft-live-results">
+          <p className="mock-draft-live-results__title">Draft complete</p>
+          <p className="muted mock-draft-live-results__copy">
+            Review the board above — expand it full screen for a clearer look. Your keepers and picks are under{' '}
+            <strong>Roster</strong>.
+          </p>
+          <div className="mock-draft-live-results__actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setBoardExpanded(true)}>
+              Expand board
+            </button>
+            <button type="button" className="btn btn-primary" onClick={leaveDraftRoom}>
+              Done
+            </button>
+          </div>
+        </div>
+      );
+    }
     if (!currentPickMeta || pickCursor >= pickQueue.length) {
       return (
         <p className="muted mock-draft-live-wait" aria-live="polite">
-          {pickCursor >= pickQueue.length && pickQueue.length > 0 ? 'Draft complete.' : 'Waiting…'}
+          Waiting…
         </p>
       );
     }
@@ -1398,7 +1446,7 @@ export default function MockDraft() {
                       type="button"
                       className="btn btn-secondary"
                       onClick={leaveDraftRoom}
-                      disabled={!timedDraftActive}
+                      disabled={!draftRoomOpen}
                     >
                       Leave draft room
                     </button>
@@ -1537,29 +1585,44 @@ export default function MockDraft() {
         </>
       )}
 
-      {timedDraftActive && slotOrderUserIds?.length > 0 && (
+      {draftRoomOpen && slotOrderUserIds?.length > 0 && (
         <div
           className="mock-draft-live-overlay"
           role="dialog"
           aria-modal="true"
           aria-labelledby="mock-draft-live-title"
         >
-          <div className="mock-draft-live-overlay__inner">
+          <div
+            className={
+              'mock-draft-live-overlay__inner' +
+              (boardExpanded ? ' mock-draft-live-overlay__inner--board-expanded' : '')
+            }
+          >
             <header className="mock-draft-live-bar">
               <button
                 type="button"
                 className="mock-draft-live-bar__back"
                 onClick={leaveDraftRoom}
-                aria-label="Leave draft room"
+                aria-label={draftComplete ? 'Close draft room' : 'Leave draft room'}
               >
-                ← Back
+                {draftComplete ? 'Done' : '← Back'}
               </button>
               <div className="mock-draft-live-bar__center">
                 <h2 id="mock-draft-live-title" className="mock-draft-live-bar__title">
-                  Mock draft room
+                  {draftComplete ? 'Mock draft results' : 'Mock draft room'}
                 </h2>
                 <p className="mock-draft-live-bar__meta muted">
-                  {currentPickMeta && pickCursor < pickQueue.length ? (
+                  {draftComplete ? (
+                    <>
+                      <strong>{draftPicks.length}</strong> picks complete
+                      {myTeamUserId ? (
+                        <>
+                          {' '}
+                          · <strong>{labelByUserId.get(myTeamUserId)}</strong>
+                        </>
+                      ) : null}
+                    </>
+                  ) : currentPickMeta && pickCursor < pickQueue.length ? (
                     <>
                       Pick <strong>{pickCursor + 1}</strong>/<strong>{pickQueue.length}</strong> · Rd{' '}
                       <strong>{currentPickMeta.round}</strong> · <strong>{labelByUserId.get(currentPickMeta.userId)}</strong>
@@ -1574,6 +1637,7 @@ export default function MockDraft() {
               </div>
               <div className="mock-draft-live-bar__right">
                 {rankings.status === 'ready' &&
+                  timedDraftActive &&
                   currentPickMeta &&
                   pickCursor < pickQueue.length &&
                   isMyPick && (
@@ -1587,10 +1651,37 @@ export default function MockDraft() {
                       {fmtClock(secondsLeft)}
                     </div>
                   )}
+                <button
+                  type="button"
+                  className="mock-draft-live-bar__expand"
+                  onClick={() => setBoardExpanded((v) => !v)}
+                  aria-pressed={boardExpanded}
+                  title={boardExpanded ? 'Exit full-screen board' : 'Expand board full screen'}
+                >
+                  {boardExpanded ? 'Exit board' : 'Expand board'}
+                </button>
               </div>
             </header>
 
-            <div className="mock-draft-live-board-shell">
+            <div
+              className={
+                'mock-draft-live-board-shell' +
+                (boardExpanded ? ' mock-draft-live-board-shell--expanded' : '')
+              }
+            >
+              <div className="mock-draft-live-board-shell__toolbar">
+                <span className="muted mock-draft-live-board-shell__label">
+                  {boardExpanded ? 'Full-screen board' : 'Board'}
+                </span>
+                <button
+                  type="button"
+                  className="mock-draft-live-board-shell__expand"
+                  onClick={() => setBoardExpanded((v) => !v)}
+                  aria-pressed={boardExpanded}
+                >
+                  {boardExpanded ? 'Collapse' : 'Full screen'}
+                </button>
+              </div>
               <MockDraftBoardPanel
                 compact
                 omitHeading
@@ -1608,10 +1699,11 @@ export default function MockDraft() {
               />
             </div>
 
+            {!boardExpanded && (
             <div className="mock-draft-live-workspace">
               <div className="mock-draft-live-mobile-dock" role="tablist" aria-label="Draft panels">
                 {[
-                  ['players', 'Players'],
+                  ['players', draftComplete ? 'Results' : 'Players'],
                   ['queue', 'Queue'],
                   ['roster', 'Roster'],
                   ['chat', 'Chat'],
@@ -1638,7 +1730,7 @@ export default function MockDraft() {
                     'mock-draft-live-players-col' +
                     (liveMobileDockTab !== 'players' ? ' mock-draft-live-players-col--hide-sm' : '')
                   }
-                  aria-label="Available players"
+                  aria-label={draftComplete ? 'Draft results' : 'Available players'}
                 >
                   <div className="mock-draft-live-players-inner">{renderLivePlayerWorkspace()}</div>
                 </section>
@@ -1673,6 +1765,7 @@ export default function MockDraft() {
                 )}
               </div>
             </div>
+            )}
           </div>
         </div>
       )}
