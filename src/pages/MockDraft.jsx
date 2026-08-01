@@ -24,19 +24,6 @@ const POSITION_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DST'];
 
 const DEFAULT_PICK_SECONDS = 90;
 
-function formatRevealLabel(isoRaw) {
-  const ts = Date.parse(isoRaw);
-  if (!Number.isFinite(ts)) return isoRaw;
-  return new Date(ts).toLocaleString(undefined, {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 function fmtNominationRow(n, lookup) {
   if (n.nomination_kind === 'freeform') {
     return [n.k1_text, n.k2_text, n.k3_text].filter(Boolean).join(' · ');
@@ -82,13 +69,6 @@ function finalToMockNomination(final) {
     source_season: final.source_season != null ? String(final.source_season) : null,
     carry_into_season: final.carry_into_season != null ? String(final.carry_into_season) : null,
   };
-}
-
-function formatScrapeDate(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function pickCellForRoundTeam(draftPicks, round, teamUserId) {
@@ -202,7 +182,6 @@ function MockDraftBoardPanel({
   omitHeading = false,
   highlightUserId = '',
 }) {
-  const showCaptions = !compact && !dense;
   const showHeading = !omitHeading && !dense;
   return (
     <div
@@ -215,24 +194,6 @@ function MockDraftBoardPanel({
       {showHeading && !compact && <h3 className="mock-draft-board-title">Draft board</h3>}
       {showHeading && compact && (
         <h3 className="mock-draft-board-title mock-draft-board-title--compact">Board</h3>
-      )}
-      {showCaptions && keeperCostDraft.status === 'loading' && (
-        <p className="muted mock-draft-board-caption">Loading startup draft rounds for keeper costs…</p>
-      )}
-      {showCaptions && keeperCostDraft.status === 'ready' && keeperCostDraft.sourceSeason && (
-        <p className="muted mock-draft-board-caption">
-          Keeper slots use each player&apos;s startup draft round from the <strong>{keeperCostDraft.sourceSeason}</strong>{' '}
-          season (missing from draft → round {leagueFormat.undraftedKeeperRound}).
-        </p>
-      )}
-      {showCaptions && keeperCostDraft.status === 'none' && (
-        <p className="muted mock-draft-board-caption">
-          No completed startup draft found in linked leagues yet — keeper round cells stay empty until Sleeper history
-          loads.
-        </p>
-      )}
-      {showCaptions && keeperCostDraft.status === 'error' && (
-        <p className="muted mock-draft-board-caption">Could not load startup draft rounds for keeper costs.</p>
       )}
       <div className="mock-draft-board-scroll">
         <table className={'mock-draft-board' + (dense ? ' mock-draft-board--dense' : '')}>
@@ -1147,9 +1108,7 @@ export default function MockDraft() {
             ({labelByUserId.get(myTeamUserId) || 'your team'})
           </span>
         </p>
-        {myKeeperSlotsLive.length === 0 && myDraftedPicksLive.length === 0 ? (
-          <p className="muted mock-draft-live-aux-copy">No keepers or picks yet in this mock run.</p>
-        ) : (
+        {myKeeperSlotsLive.length === 0 && myDraftedPicksLive.length === 0 ? null : (
           <ul className="mock-draft-live-roster-list">
             {myKeeperSlotsLive.map((k) => (
               <li key={`keeper-${k.round}-${k.playerId}`}>
@@ -1177,9 +1136,6 @@ export default function MockDraft() {
       return (
         <div className="mock-draft-live-results">
           <p className="mock-draft-live-results__title">Draft complete</p>
-          <p className="muted mock-draft-live-results__copy">
-            Review the board above — tap the expand control for a full look. Your keepers and picks are under Roster.
-          </p>
           <div className="mock-draft-live-results__actions">
             <button type="button" className="btn btn-secondary" onClick={() => setBoardExpanded(true)} aria-label="Expand board">
               <ExpandIcon />
@@ -1303,14 +1259,6 @@ export default function MockDraft() {
             </tbody>
           </table>
         </div>
-        <p className="muted mock-draft-live-table-footer">
-          {sortedPoolAll.length === 0
-            ? 'No players match filters — loosen search or choose ALL positions.'
-            : sortedPoolAll.length > LIVE_TABLE_ROW_CAP
-              ? `Showing first ${sortedPoolTableRows.length} of ${sortedPoolAll.length} matching (refine filters to narrow).`
-              : `${sortedPoolTableRows.length} available.`}{' '}
-          Sort columns by tapping headers.
-        </p>
       </>
     );
   }
@@ -1319,13 +1267,6 @@ export default function MockDraft() {
     <div className="page mock-draft-page">
       <header className="mock-draft-header">
         <h1>Mock draft</h1>
-        <p className="mock-draft-lead muted">
-          Opponents take about a second per pick; your picks use the timer. Pool order is{' '}
-          <strong>Sleeper Half-PPR ADP</strong>. CPU teams use FantasyPros-style logic (random cheat sheet per team,
-          roster need, scarcity). Locked-in keepers (K1 + ceremony second) fill the{' '}
-          <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers / undrafted →
-          round {leagueFormat.undraftedKeeperRound}) — every manager&apos;s keepers are shown on the board.
-        </p>
       </header>
 
       {!config.leagueId && (
@@ -1346,42 +1287,6 @@ export default function MockDraft() {
 
       {config.leagueId && !chainLoading && chain[0] && (
         <>
-          {nominationsHidden && !useDevKeeperMocks && (
-            <section className="card mock-draft-card">
-              <div className="keepers-reveal-gate" role="status">
-                <p className="keepers-reveal-gate__title">Mock draft before nominations go public</p>
-                <p className="keepers-reveal-gate__body">
-                  Keeper nominations stay hidden until{' '}
-                  <strong>{config.keepersRevealAt ? formatRevealLabel(config.keepersRevealAt) : 'the reveal date'}</strong>.
-                  {isCommissioner ? (
-                    <>
-                      {' '}
-                      This simulator uses each manager&apos;s <strong>latest nomination on file</strong> (any season) for
-                      keeper slots.
-                    </>
-                  ) : lockedSleeperUserId ? (
-                    <>
-                      {' '}
-                      Only <strong>your</strong> latest nomination fills keeper spots on your team; other teams simulate as if
-                      they have no keepers until reveal.
-                    </>
-                  ) : (
-                    <>
-                      {' '}
-                      Sign in with a member account that has a Sleeper id linked so your keeper nominations load here.
-                    </>
-                  )}
-                </p>
-              </div>
-            </section>
-          )}
-          {useDevKeeperMocks && (
-            <div className="mock-draft-dev-banner" role="status">
-              <strong>Dev mode:</strong> mocked keepers use real startup cost rounds when loaded — at most one keeper per cost
-              round per team (including undrafted → round {leagueFormat.undraftedKeeperRound}). Until startup picks load,
-              only one mocked keeper per roster is assigned.
-            </div>
-          )}
           <section className="mock-draft-meta card mock-draft-card">
             <div>
               <span className="mock-draft-meta__label">Roster season</span>
@@ -1393,14 +1298,12 @@ export default function MockDraft() {
             {towardSeason != null && Number.isFinite(towardSeason) && (
               <div>
                 <span className="mock-draft-meta__label">Drafting toward</span>
-                <span className="mock-draft-meta__value">{towardSeason} season</span>
+                <span className="mock-draft-meta__value">{towardSeason}</span>
               </div>
             )}
             <div>
-              <span className="mock-draft-meta__label">Target roster</span>
-              <span className="mock-draft-meta__value">
-                {leagueFormat.draftRounds} spots per team (keepers count toward this total)
-              </span>
+              <span className="mock-draft-meta__label">Rounds</span>
+              <span className="mock-draft-meta__value">{leagueFormat.draftRounds}</span>
             </div>
           </section>
 
@@ -1432,25 +1335,14 @@ export default function MockDraft() {
                         <h2 className="mock-draft-team-card__title">{label}</h2>
                         {!nom && (
                           <p className="muted mock-draft-team-card__keepers">
-                            {hideOthersKeepers
-                              ? 'Hidden until nominations are revealed — mock draft assumes no keepers for this team.'
-                              : usingLockedInFinals
-                                ? 'No locked-in keepers on file for this mock draft.'
-                                : 'No nomination on file for this mock draft.'}
+                            {hideOthersKeepers ? '—' : 'None'}
                           </p>
                         )}
                         {nom && !keeperLine && (
-                          <p className="muted mock-draft-team-card__keepers">
-                            Saved — no keeper slots filled.
-                          </p>
+                          <p className="muted mock-draft-team-card__keepers">None</p>
                         )}
                         {keeperLine && (
-                          <p className="mock-draft-team-card__keepers">
-                            <span className="mock-draft-team-card__keepers-label">
-                              {usingLockedInFinals ? 'Locked in' : 'Keepers'}
-                            </span>
-                            {keeperLine}
-                          </p>
+                          <p className="mock-draft-team-card__keepers">{keeperLine}</p>
                         )}
                       </li>
                     );
@@ -1460,30 +1352,11 @@ export default function MockDraft() {
 
               <section className="card mock-draft-card mock-draft-simulator">
                 <h2 className="mock-draft-simulator__title">Draft room</h2>
-                <p className="muted mock-draft-simulator__lead">
-                  Player pool is Sleeper Half-PPR ADP. CPU / timer picks use FantasyPros-style logic: each team gets a
-                  random cheat sheet (Sleeper ADP
-                  {rankingBoards.some((b) => b.id === 'dynastyprocess-ecr') ? ', DynastyProcess ECR' : ''}
-                  {rankingBoards.some((b) => b.id === 'fp-ecr') ? ', FantasyPros live ECR' : ''}) with rank jitter, then
-                  scores by roster need and positional scarcity.
-                </p>
 
-                {rankings.status === 'loading' && <p className="muted">Loading ranking boards…</p>}
+                {rankings.status === 'loading' && <p className="muted">Loading…</p>}
                 {rankings.status === 'error' && (
                   <p className="mock-draft-simulator__err" role="alert">
-                    Could not load ADP. {rankings.message}
-                  </p>
-                )}
-                {rankings.status === 'ready' && (
-                  <p className="muted mock-draft-simulator__meta">
-                    Pool: {rankings.data.count?.toLocaleString?.() ?? rankingsPlayers.length} players ·{' '}
-                    {rankingBoards.length} bot cheat-sheet source{rankingBoards.length === 1 ? '' : 's'}
-                    {rankings.data.scrape_date && (
-                      <>
-                        {' '}
-                        · as of <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
-                      </>
-                    )}
+                    {rankings.message || 'Could not load ADP.'}
                   </p>
                 )}
 
@@ -1495,7 +1368,7 @@ export default function MockDraft() {
                       disabled={Boolean(lockedSleeperUserId) || timedDraftActive}
                       onChange={(e) => setMyTeamUserId(e.target.value)}
                     >
-                      <option value="">Select your team…</option>
+                      <option value="">Select team…</option>
                       {sortedUsers.map((u) => (
                         <option key={u.user_id} value={u.user_id}>
                           {u.metadata?.team_name || u.display_name || u.user_id}
@@ -1503,14 +1376,11 @@ export default function MockDraft() {
                       ))}
                     </select>
                   </label>
-                  {lockedSleeperUserId && (
-                    <p className="muted mock-draft-my-team-hint">Locked to your member account.</p>
-                  )}
                 </div>
 
                 <div className="mock-draft-controls">
                   <label className="mock-draft-control">
-                    <span className="mock-draft-control__label">Pick timer (seconds)</span>
+                    <span className="mock-draft-control__label">Pick timer</span>
                     <select
                       value={pickSeconds}
                       disabled={timedDraftActive}
@@ -1523,19 +1393,13 @@ export default function MockDraft() {
                       ))}
                     </select>
                   </label>
-                  <label className="mock-draft-control">
-                    <span className="mock-draft-control__label">CPU / timer picks</span>
-                    <p className="muted mock-draft-control__hint" style={{ margin: '0.35rem 0 0', maxWidth: '22rem' }}>
-                      FantasyPros-style: random board per team + roster need + scarcity (reassigned each mock).
-                    </p>
-                  </label>
 
                   <div className="mock-draft-actions">
                     <button type="button" className="btn btn-secondary" onClick={randomizeOrder} disabled={timedDraftActive}>
                       Randomize draft order
                     </button>
                     <button type="button" className="btn btn-secondary" onClick={resetDraftOnly} disabled={timedDraftActive}>
-                      Clear board (instant sim only)
+                      Clear board
                     </button>
                     <button
                       type="button"
@@ -1556,7 +1420,7 @@ export default function MockDraft() {
                         !myTeamUserId
                       }
                     >
-                      Enter draft room (timer)
+                      Enter draft room
                     </button>
                     <button
                       type="button"
@@ -1566,27 +1430,20 @@ export default function MockDraft() {
                         !slotOrderUserIds?.length || rankings.status !== 'ready' || timedDraftActive || draftPoolExhausted
                       }
                     >
-                      Run full auto-draft (no timer)
+                      Auto-draft
                     </button>
                   </div>
-                  {!myTeamUserId && rankings.status === 'ready' && (
-                    <p className="muted mock-draft-hint">Choose &quot;You draft as&quot; before entering the timed draft room.</p>
-                  )}
                 </div>
 
                 {draftPoolExhausted && (
                   <p className="mock-draft-simulator__err" role="status">
-                    Draft stopped — no ranked players left with Sleeper ids (or pool exhausted early).
+                    Pool exhausted.
                   </p>
-                )}
-
-                {!slotOrderUserIds?.length && (
-                  <p className="muted mock-draft-hint">Randomize draft order to assign snake slots.</p>
                 )}
 
                 {slotOrderUserIds?.length > 0 && !timedDraftActive && (
                   <div className="mock-draft-order card mock-draft-order-card">
-                    <h3 className="mock-draft-order__heading">Draft slot order (round 1 · snake)</h3>
+                    <h3 className="mock-draft-order__heading">Draft order</h3>
                     <ol className="mock-draft-order__list">
                       {slotOrderUserIds.map((uid, i) => (
                         <li key={`${uid}-${i}`}>
