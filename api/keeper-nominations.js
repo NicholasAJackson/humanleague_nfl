@@ -7,11 +7,23 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 /** Same instant as client `DEFAULT_KEEPERS_REVEAL_AT` / `VITE_KEEPERS_REVEAL_AT`; override with `KEEPERS_REVEAL_AT`. */
 const DEFAULT_KEEPERS_REVEAL_AT = '2026-08-01T12:00:00Z';
 
-function keeperRevealPending() {
+function getKeepersRevealTimestamp() {
   const raw = (process.env.KEEPERS_REVEAL_AT || DEFAULT_KEEPERS_REVEAL_AT).trim();
-  if (!raw) return false;
+  if (!raw) return null;
   const t = Date.parse(raw);
-  return Number.isFinite(t) && Date.now() < t;
+  return Number.isFinite(t) ? t : null;
+}
+
+/** True while the league-wide list stays private and nominations remain editable. */
+function keeperRevealPending() {
+  const t = getKeepersRevealTimestamp();
+  return t != null && Date.now() < t;
+}
+
+/** True once the reveal instant has passed — POST saves are rejected for everyone. */
+function keeperNominationsClosed() {
+  const t = getKeepersRevealTimestamp();
+  return t != null && Date.now() >= t;
 }
 
 function normStr(v, max) {
@@ -96,6 +108,12 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      if (keeperNominationsClosed()) {
+        return send(res, 403, {
+          error: 'Keeper nominations are locked — the reveal time has passed.',
+        });
+      }
+
       const ip = clientIp(req);
       if (!rateLimit(`keeper-nom:${ip}`, { max: 12, windowMs: 60_000 })) {
         return send(res, 429, { error: 'Too many requests, slow down a sec.' });
