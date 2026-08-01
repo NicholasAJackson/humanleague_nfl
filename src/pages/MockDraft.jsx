@@ -865,13 +865,13 @@ export default function MockDraft() {
 
     if (!isHumanPick) {
       const snapCursor = pickCursor;
-      const id = window.requestAnimationFrame(() => {
+      const id = window.setTimeout(() => {
         if (!timedDraftActiveRef.current) return;
         if (pickCursorRef.current !== snapCursor) return;
         if (draftPicksRef.current.length !== snapCursor) return;
         autopickCommitRef.current();
-      });
-      return () => window.cancelAnimationFrame(id);
+      }, 1000);
+      return () => window.clearTimeout(id);
     }
 
     setSecondsLeft(pickSeconds);
@@ -1049,7 +1049,8 @@ export default function MockDraft() {
         <div className="mock-draft-live-aux-panel mock-draft-live-aux-panel--chat">
           <p className="mock-draft-live-chat-welcome-title">Welcome to mock draft</p>
           <p className="muted mock-draft-live-aux-copy">
-            CPU teams pick instantly; your picks use the timer. Keeper costs appear on the board when startup draft history is
+            CPU teams take about a second per pick; your picks use the timer. Keeper costs appear on the board when startup
+            draft history is
             loaded. Leave anytime — your finished picks stay listed on the page behind this overlay.
           </p>
         </div>
@@ -1069,7 +1070,7 @@ export default function MockDraft() {
     if (!isMyPick) {
       return (
         <p className="muted mock-draft-live-wait" aria-live="polite">
-          <strong>{labelByUserId.get(currentPickMeta.userId)}</strong> is picking instantly…
+          <strong>{labelByUserId.get(currentPickMeta.userId)}</strong> is picking…
         </p>
       );
     }
@@ -1176,7 +1177,7 @@ export default function MockDraft() {
       <header className="mock-draft-header">
         <h1>Mock draft</h1>
         <p className="mock-draft-lead muted">
-          Opponents pick instantly; your picks use the timer. Pool order is{' '}
+          Opponents take about a second per pick; your picks use the timer. Pool order is{' '}
           <strong>Sleeper Half-PPR ADP</strong>. CPU teams use FantasyPros-style logic (random cheat sheet per team,
           roster need, scarcity). Locked-in keepers (K1 + ceremony second) fill the{' '}
           <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers / undrafted →
