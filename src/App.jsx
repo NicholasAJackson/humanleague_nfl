@@ -11,6 +11,7 @@ const Rules = lazy(() => import('./pages/Rules.jsx'));
 const Drafts = lazy(() => import('./pages/Drafts.jsx'));
 const MockDraft = lazy(() => import('./pages/MockDraft.jsx'));
 const Keepers = lazy(() => import('./pages/Keepers.jsx'));
+const KeeperCeremony = lazy(() => import('./pages/KeeperCeremony.jsx'));
 const Rankings = lazy(() => import('./pages/Rankings.jsx'));
 const MyTeam = lazy(() => import('./pages/MyTeam.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
@@ -55,11 +56,11 @@ function AppLayout() {
   );
 }
 
-function CommissionerMockDraftRoute() {
+function CommissionerOnly({ children }) {
   const { ready, user, devBypass } = useAuth();
   if (!ready) return <PageFallback />;
   if (!canAccessMockDraft(user, devBypass)) return <Navigate to="/" replace />;
-  return <MockDraft />;
+  return children;
 }
 
 export default function App() {
@@ -83,8 +84,23 @@ export default function App() {
             <Route path="/wheel" element={<Wheel />} />
             <Route path="/rules" element={<Rules />} />
             <Route path="/drafts" element={<Drafts />} />
-            <Route path="/mock-draft" element={<CommissionerMockDraftRoute />} />
+            <Route
+              path="/mock-draft"
+              element={
+                <CommissionerOnly>
+                  <MockDraft />
+                </CommissionerOnly>
+              }
+            />
             <Route path="/keepers" element={<Keepers />} />
+            <Route
+              path="/keeper-ceremony"
+              element={
+                <CommissionerOnly>
+                  <KeeperCeremony />
+                </CommissionerOnly>
+              }
+            />
             <Route path="/rankings" element={<Rankings />} />
             <Route path="/me" element={<MyTeam />} />
             <Route path="*" element={<Navigate to="/" replace />} />

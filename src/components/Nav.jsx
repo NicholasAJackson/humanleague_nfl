@@ -16,6 +16,7 @@ const overflowItems = [
   { to: '/stats', label: 'Stats', icon: StatsIcon },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
   { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, commissionerOnly: true },
+  { to: '/keeper-ceremony', label: 'Ceremony', icon: CeremonyIcon, commissionerOnly: true },
   { to: '/rules', label: 'Rules', icon: RulesIcon },
 ];
 
@@ -172,6 +173,15 @@ function KeeperIcon() {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 3l2.4 4.9L20 9.3l-4 3.9.9 5.6L12 16.9 7.1 18.8 8 13.2 4 9.3l5.6-1.4L12 3z" />
+    </svg>
+  );
+}
+
+function CeremonyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v9l6.5 3.5" />
     </svg>
   );
 }
