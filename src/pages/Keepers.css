@@ -209,7 +209,9 @@
   line-height: 1.4;
   color: var(--color-text);
   font-weight: 600;
-  word-break: break-word;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
 }
 
 .keepers-mine-meta {
@@ -343,12 +345,14 @@
   margin-top: var(--space-2);
   border-radius: 12px;
   border: 1px solid rgba(100, 116, 139, 0.14);
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background: rgba(8, 12, 24, 0.35);
 }
 
 .keepers-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: var(--fs-sm);
 }
@@ -356,6 +360,7 @@
 .keepers-table th,
 .keepers-table td {
   border-bottom: none;
+  white-space: nowrap;
 }
 
 .keepers-table th {

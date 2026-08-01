@@ -499,47 +499,45 @@ export default function Keepers() {
             {listLoading && <p className="muted">Loading…</p>}
             {!listLoading && nominations.length === 0 && <p className="muted">No nominations yet.</p>}
             {!listLoading && nominations.length > 0 && (
-              <div className="scroll-x">
-                <div className="keepers-table-wrap">
-                  <table className="keepers-table">
-                    <thead>
-                      <tr>
-                        <th>Season</th>
-                        <th>Manager</th>
-                        <th>Type</th>
-                        <th>Keepers</th>
-                        <th>Updated</th>
+              <div className="keepers-table-wrap">
+                <table className="keepers-table">
+                  <thead>
+                    <tr>
+                      <th>Season</th>
+                      <th>Manager</th>
+                      <th>Type</th>
+                      <th>Keepers</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nominations.map((n) => (
+                      <tr key={n.id}>
+                        <td className="tabular">{n.source_season}</td>
+                        <td>
+                          <div>{nameByUserId[n.sleeper_user_id] || '—'}</div>
+                          <div className="keepers-mono dim" style={{ fontSize: 11, marginTop: 2 }}>
+                            {n.sleeper_user_id}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className={
+                              'keepers-type-pill' +
+                              (n.nomination_kind === 'freeform' ? ' keepers-type-pill--freeform' : '')
+                            }
+                          >
+                            {n.nomination_kind}
+                          </span>
+                        </td>
+                        <td>{fmtNominationRow(n, lookup)}</td>
+                        <td className="keepers-table-date">
+                          {n.updated_at ? new Date(n.updated_at).toLocaleString() : '—'}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {nominations.map((n) => (
-                        <tr key={n.id}>
-                          <td className="tabular">{n.source_season}</td>
-                          <td>
-                            <div>{nameByUserId[n.sleeper_user_id] || '—'}</div>
-                            <div className="keepers-mono dim" style={{ fontSize: 11, marginTop: 2 }}>
-                              {n.sleeper_user_id}
-                            </div>
-                          </td>
-                          <td>
-                            <span
-                              className={
-                                'keepers-type-pill' +
-                                (n.nomination_kind === 'freeform' ? ' keepers-type-pill--freeform' : '')
-                              }
-                            >
-                              {n.nomination_kind}
-                            </span>
-                          </td>
-                          <td>{fmtNominationRow(n, lookup)}</td>
-                          <td className="keepers-table-date">
-                            {n.updated_at ? new Date(n.updated_at).toLocaleString() : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </>
