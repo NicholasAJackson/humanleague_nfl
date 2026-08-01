@@ -2,7 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Nav from './components/Nav.jsx';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
-import { canAccessMockDraft } from './config.js';
+import { canAccessMockDraft, canAccessKeeperCeremony } from './config.js';
 
 const Home = lazy(() => import('./pages/Home.jsx'));
 const Stats = lazy(() => import('./pages/Stats.jsx'));
@@ -56,10 +56,17 @@ function AppLayout() {
   );
 }
 
-function CommissionerOnly({ children }) {
+function MockDraftOnly({ children }) {
   const { ready, user, devBypass } = useAuth();
   if (!ready) return <PageFallback />;
   if (!canAccessMockDraft(user, devBypass)) return <Navigate to="/" replace />;
+  return children;
+}
+
+function CeremonyOnly({ children }) {
+  const { ready, user, devBypass } = useAuth();
+  if (!ready) return <PageFallback />;
+  if (!canAccessKeeperCeremony(user, devBypass)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -87,18 +94,18 @@ export default function App() {
             <Route
               path="/mock-draft"
               element={
-                <CommissionerOnly>
+                <MockDraftOnly>
                   <MockDraft />
-                </CommissionerOnly>
+                </MockDraftOnly>
               }
             />
             <Route path="/keepers" element={<Keepers />} />
             <Route
               path="/keeper-ceremony"
               element={
-                <CommissionerOnly>
+                <CeremonyOnly>
                   <KeeperCeremony />
-                </CommissionerOnly>
+                </CeremonyOnly>
               }
             />
             <Route path="/rankings" element={<Rankings />} />

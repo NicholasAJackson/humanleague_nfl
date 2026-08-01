@@ -24,8 +24,15 @@ export const leagueFormat = {
   starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1 },
 };
 
-/** Mock draft UI + `/mock-draft`: commissioners only in production; local dev allows session bypass (see AuthContext). */
+/** Mock draft: commissioners + testers; local dev allows session bypass (see AuthContext). */
 export function canAccessMockDraft(user, devBypass) {
+  if (user?.role === 'commissioner' || user?.role === 'tester') return true;
+  if (import.meta.env.DEV && devBypass) return true;
+  return false;
+}
+
+/** Keeper ceremony: commissioners only (testers cannot lock finals). */
+export function canAccessKeeperCeremony(user, devBypass) {
   if (user?.role === 'commissioner') return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;

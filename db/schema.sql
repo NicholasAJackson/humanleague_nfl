@@ -85,7 +85,7 @@ create table if not exists app_users (
   username          text not null check (length(username) between 2 and 48),
   password_hash     text not null check (length(password_hash) between 16 and 220),
   sleeper_user_id   text null check (sleeper_user_id is null or length(sleeper_user_id) between 4 and 80),
-  role              text not null default 'manager' check (role in ('manager', 'commissioner')),
+  role              text not null default 'manager' check (role in ('manager', 'commissioner', 'tester')),
   disabled          boolean not null default false,
   created_at        timestamptz not null default now()
 );
