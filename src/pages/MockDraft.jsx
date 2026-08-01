@@ -49,6 +49,39 @@ function fmtNominationRow(n, lookup) {
     .join(' · ');
 }
 
+/** Map a locked-in keeper_finals row → nomination shape the mock engine already understands (k1 + second only). */
+function finalToMockNomination(final) {
+  if (!final?.sleeper_user_id) return null;
+  const hasIds = Boolean(final.k1_player_id || final.second_player_id);
+  if (hasIds) {
+    return {
+      sleeper_user_id: String(final.sleeper_user_id),
+      nomination_kind: 'roster',
+      k1_player_id: final.k1_player_id || null,
+      k2_player_id: final.second_player_id || null,
+      k3_player_id: null,
+      k1_text: null,
+      k2_text: null,
+      k3_text: null,
+      source_season: final.source_season != null ? String(final.source_season) : null,
+      carry_into_season: final.carry_into_season != null ? String(final.carry_into_season) : null,
+    };
+  }
+  if (!final.k1_text && !final.second_text) return null;
+  return {
+    sleeper_user_id: String(final.sleeper_user_id),
+    nomination_kind: 'freeform',
+    k1_player_id: null,
+    k2_player_id: null,
+    k3_player_id: null,
+    k1_text: final.k1_text || null,
+    k2_text: final.second_text || null,
+    k3_text: null,
+    source_season: final.source_season != null ? String(final.source_season) : null,
+    carry_into_season: final.carry_into_season != null ? String(final.carry_into_season) : null,
+  };
+}
+
 function formatScrapeDate(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -61,6 +94,7 @@ function pickCellForRoundTeam(draftPicks, round, teamUserId) {
 }
 
 function fmtKeeperCostPlayer(pid, lookup) {
+  if (pid === '__anon__') return 'Keeper';
   const x = lookup?.get(pid);
   return x ? `${x.name} (${x.position || '?'})` : pid;
 }
@@ -249,15 +283,13 @@ export default function MockDraft() {
 
   const [nominationRowsRaw, setNominationRowsRaw] = useState([]);
   const [nomLoading, setNomLoading] = useState(false);
+  const [finalRowsRaw, setFinalRowsRaw] = useState([]);
+  const [finalsLoading, setFinalsLoading] = useState(false);
 
   const [lookup, setLookup] = useState(null);
 
   const [rankings, setRankings] = useState({ status: 'idle' });
-  const [autopickStrategy, setAutopickStrategy] = useState(() =>
-    typeof window !== 'undefined' && window.localStorage?.getItem('mock-draft-strategy') === 'owned'
-      ? 'owned'
-      : 'ecr',
-  );
+  const [autopickStrategy, setAutopickStrategy] = useState('ecr');
   const [pickSeconds, setPickSeconds] = useState(() => {
     const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('mock-draft-pick-seconds') : null;
     const n = raw != null ? Number(raw) : DEFAULT_PICK_SECONDS;
@@ -318,6 +350,34 @@ export default function MockDraft() {
       /* ignore */
     }
   }, [pickSeconds]);
+
+  useEffect(() => {
+    if (useDevKeeperMocks) {
+      setFinalRowsRaw([]);
+      setFinalsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setFinalsLoading(true);
+    (async () => {
+      try {
+        const res = await fetch('/api/keeper-finals', { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) {
+          setFinalRowsRaw(Array.isArray(data.finals) ? data.finals : []);
+        } else if (!cancelled) {
+          setFinalRowsRaw([]);
+        }
+      } catch {
+        if (!cancelled) setFinalRowsRaw([]);
+      } finally {
+        if (!cancelled) setFinalsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [useDevKeeperMocks]);
 
   useEffect(() => {
     if (!config.leagueId) {
@@ -487,7 +547,7 @@ export default function MockDraft() {
     }
     let cancelled = false;
     setRankings({ status: 'loading' });
-    fetch('/api/rankings?page_type=redraft-overall', { credentials: 'include' })
+    fetch('/api/rankings?page_type=sleeper-adp-half', { credentials: 'include' })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -504,8 +564,29 @@ export default function MockDraft() {
     };
   }, [config.leagueId]);
 
+  const towardSeason =
+    chain[0] && chain[0].season != null ? Number(chain[0].season) + 1 : null;
+
   const nominationsEffective = useMemo(() => {
     if (useDevKeeperMocks) return nominationRowsRaw;
+
+    const carry =
+      towardSeason != null && Number.isFinite(towardSeason) ? String(towardSeason) : null;
+    const finalsForSeason = finalRowsRaw.filter((f) => {
+      if (!carry) return true;
+      return String(f.carry_into_season) === carry;
+    });
+
+    if (finalsForSeason.length > 0) {
+      let pool = finalsForSeason;
+      if (nominationsHidden && !isCommissioner) {
+        if (!lockedSleeperUserId) return [];
+        pool = finalsForSeason.filter((f) => f.sleeper_user_id === lockedSleeperUserId);
+      }
+      return pool.map(finalToMockNomination).filter(Boolean);
+    }
+
+    // Fallback before finals exist: nominations (may include K2+K3 candidates).
     if (!seasonLabel || nominationRowsRaw.length === 0) return [];
 
     if (!nominationsHidden) {
@@ -523,12 +604,21 @@ export default function MockDraft() {
     return pickLatestNominationPerUser(pool);
   }, [
     nominationRowsRaw,
+    finalRowsRaw,
     nominationsHidden,
     seasonLabel,
+    towardSeason,
     useDevKeeperMocks,
     isCommissioner,
     lockedSleeperUserId,
   ]);
+
+  const usingLockedInFinals = useMemo(() => {
+    if (useDevKeeperMocks) return false;
+    const carry =
+      towardSeason != null && Number.isFinite(towardSeason) ? String(towardSeason) : null;
+    return finalRowsRaw.some((f) => (carry ? String(f.carry_into_season) === carry : true));
+  }, [finalRowsRaw, towardSeason, useDevKeeperMocks]);
 
   const nominationByUserId = useMemo(() => {
     const m = new Map();
@@ -565,6 +655,28 @@ export default function MockDraft() {
     );
   }, [keeperCostDraft, sortedUsers, nominationByUserId]);
 
+  /**
+   * Board display: when you draft as a manager, only that team's locked-in keepers are named
+   * in their cost-round slots. Other teams still consume keeper rounds in the sim (blocked),
+   * but show an anonymous keeper marker so those cells aren't empty.
+   */
+  const boardKeeperCostByUserRound = useMemo(() => {
+    if (!myTeamUserId) return new Map();
+    const out = new Map();
+    for (const [uid, byRound] of keeperCostByUserRound.entries()) {
+      if (uid === myTeamUserId) {
+        out.set(uid, byRound);
+        continue;
+      }
+      const anon = new Map();
+      for (const [round, ids] of byRound.entries()) {
+        if (ids?.length) anon.set(round, ['__anon__']);
+      }
+      if (anon.size) out.set(uid, anon);
+    }
+    return out;
+  }, [keeperCostByUserRound, myTeamUserId]);
+
   const keeperBlockedRoundsByUserId = useMemo(
     () => keeperCostRoundBlocksFromPlacements(keeperCostByUserRound),
     [keeperCostByUserRound],
@@ -579,10 +691,10 @@ export default function MockDraft() {
     setMyTeamUserId((prev) => (prev && ids.has(prev) ? prev : ''));
   }, [lockedSleeperUserId, sortedUsers]);
 
-  const towardSeason =
-    chain[0] && chain[0].season != null ? Number(chain[0].season) + 1 : null;
-
-  const loadingAny = chainLoading || usersLoading || (useDevKeeperMocks ? rostersLoading : nomLoading);
+  const loadingAny =
+    chainLoading ||
+    usersLoading ||
+    (useDevKeeperMocks ? rostersLoading : nomLoading || finalsLoading);
 
   const randomizeOrder = useCallback(() => {
     if (timedDraftActive) return;
@@ -841,6 +953,19 @@ export default function MockDraft() {
       .sort((a, b) => (a.overallPick ?? 0) - (b.overallPick ?? 0));
   }, [draftPicks, myTeamUserId]);
 
+  const myKeeperSlotsLive = useMemo(() => {
+    if (!myTeamUserId) return [];
+    const byRound = keeperCostByUserRound.get(myTeamUserId);
+    if (!byRound) return [];
+    const rows = [];
+    for (const [round, ids] of byRound.entries()) {
+      for (const pid of ids || []) {
+        rows.push({ round: Number(round), playerId: String(pid) });
+      }
+    }
+    return rows.sort((a, b) => a.round - b.round || a.playerId.localeCompare(b.playerId));
+  }, [keeperCostByUserRound, myTeamUserId]);
+
   function renderLiveAuxiliaryPanel(tabId) {
     if (tabId === 'queue') {
       return (
@@ -863,10 +988,17 @@ export default function MockDraft() {
               ({labelByUserId.get(myTeamUserId) || 'your team'})
             </span>
           </p>
-          {myDraftedPicksLive.length === 0 ? (
-            <p className="muted mock-draft-live-aux-copy">No picks yet in this mock run.</p>
+          {myKeeperSlotsLive.length === 0 && myDraftedPicksLive.length === 0 ? (
+            <p className="muted mock-draft-live-aux-copy">No keepers or picks yet in this mock run.</p>
           ) : (
             <ul className="mock-draft-live-roster-list">
+              {myKeeperSlotsLive.map((k) => (
+                <li key={`keeper-${k.round}-${k.playerId}`}>
+                  <span className="tabular mock-draft-live-roster-slot">R{k.round}</span>
+                  <span className="mock-draft-live-roster-name">{fmtKeeperCostPlayer(k.playerId, lookup)}</span>
+                  <span className="mock-draft-live-roster-tag">keeper</span>
+                </li>
+              ))}
               {myDraftedPicksLive.map((p) => (
                 <li key={`${p.overallPick}-${p.sleeperId}`}>
                   <span className="tabular mock-draft-live-roster-slot">{p.overallPick}</span>
@@ -910,13 +1042,12 @@ export default function MockDraft() {
       );
     }
     if (rankings.status !== 'ready') {
-      return <p className="muted">Loading rankings…</p>;
+      return <p className="muted">Loading ADP…</p>;
     }
     return (
       <>
         <p className="mock-draft-live-pick-hint">
-          Click a row to draft that player. When time runs out, autopick uses your strategy (
-          {autopickStrategy === 'owned' ? 'chalk' : 'ECR'}).
+          Click a row to draft that player. When time runs out, autopick uses Sleeper ADP.
         </p>
         <div className="mock-draft-picker__filters mock-draft-live-filters">
           <label className="mock-draft-picker__search">
@@ -950,7 +1081,7 @@ export default function MockDraft() {
               <tr>
                 <th scope="col" className="mock-draft-live-table__ecr">
                   <button type="button" className="mock-draft-sort-th" onClick={() => togglePlayerSort('ecr')}>
-                    {sortHeaderLabel('ecr', 'ECR')}
+                    {sortHeaderLabel('ecr', 'ADP')}
                   </button>
                 </th>
                 <th scope="col">
@@ -983,7 +1114,9 @@ export default function MockDraft() {
                   tabIndex={0}
                   role="button"
                 >
-                  <td className="tabular mock-draft-live-table__ecr">{p.ecr ?? '—'}</td>
+                  <td className="tabular mock-draft-live-table__ecr">
+                    {p.ecr != null && Number.isFinite(Number(p.ecr)) ? Number(p.ecr).toFixed(1) : '—'}
+                  </td>
                   <td>{p.name}</td>
                   <td className="muted mock-draft-live-table__pos">{p.pos ?? '—'}</td>
                   <td className="muted">{p.team ?? '—'}</td>
@@ -1011,9 +1144,11 @@ export default function MockDraft() {
       <header className="mock-draft-header">
         <h1>Mock draft</h1>
         <p className="mock-draft-lead muted">
-          Opponents pick instantly; your picks use the timer. Keeper nominations fill the{' '}
-          <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers / undrafted →
-          round {leagueFormat.undraftedKeeperRound}), same idea as losing that round&apos;s pick.
+          Opponents pick instantly; your picks use the timer. Pool order is{' '}
+          <strong>Sleeper Half-PPR ADP</strong>. Locked-in keepers (K1 + ceremony second) fill the{' '}
+          <strong>round slot each player costs</strong> from the last startup snake draft on file (waivers /
+          undrafted → round {leagueFormat.undraftedKeeperRound}). Select who you draft as to see{' '}
+          <strong>your</strong> keepers named on the board.
         </p>
       </header>
 
@@ -1093,7 +1228,7 @@ export default function MockDraft() {
             </div>
           </section>
 
-          {loadingAny && <p className="muted">Loading managers and nominations…</p>}
+          {loadingAny && <p className="muted">Loading managers and keepers…</p>}
 
           {!loadingAny && sortedUsers.length === 0 && (
             <p className="muted">No managers found for this league season.</p>
@@ -1102,7 +1237,9 @@ export default function MockDraft() {
           {!loadingAny && sortedUsers.length > 0 && (
             <>
               <details className="card mock-draft-card mock-draft-keepers-details">
-                <summary className="mock-draft-keepers-details__summary">Keepers by team</summary>
+                <summary className="mock-draft-keepers-details__summary">
+                  {usingLockedInFinals ? 'Locked-in keepers by team' : 'Keepers by team'}
+                </summary>
                 <ul className="mock-draft-team-grid mock-draft-team-grid--nested">
                   {sortedUsers.map((u) => {
                     const label = u.metadata?.team_name || u.display_name || u.user_id;
@@ -1121,17 +1258,21 @@ export default function MockDraft() {
                           <p className="muted mock-draft-team-card__keepers">
                             {hideOthersKeepers
                               ? 'Hidden until nominations are revealed — mock draft assumes no keepers for this team.'
-                              : 'No nomination on file for this mock draft.'}
+                              : usingLockedInFinals
+                                ? 'No locked-in keepers on file for this mock draft.'
+                                : 'No nomination on file for this mock draft.'}
                           </p>
                         )}
                         {nom && !keeperLine && (
                           <p className="muted mock-draft-team-card__keepers">
-                            Nomination saved — no keeper slots filled.
+                            Saved — no keeper slots filled.
                           </p>
                         )}
                         {keeperLine && (
                           <p className="mock-draft-team-card__keepers">
-                            <span className="mock-draft-team-card__keepers-label">Keepers</span>
+                            <span className="mock-draft-team-card__keepers-label">
+                              {usingLockedInFinals ? 'Locked in' : 'Keepers'}
+                            </span>
                             {keeperLine}
                           </p>
                         )}
@@ -1144,18 +1285,18 @@ export default function MockDraft() {
               <section className="card mock-draft-card mock-draft-simulator">
                 <h2 className="mock-draft-simulator__title">Draft room</h2>
                 <p className="muted mock-draft-simulator__lead">
-                  Rankings from <code>/api/rankings</code>. Only players with a Sleeper id appear in the pool.
+                  Player pool from Sleeper Half-PPR ADP. Only players with a Sleeper id appear in the pool.
                 </p>
 
-                {rankings.status === 'loading' && <p className="muted">Loading rankings…</p>}
+                {rankings.status === 'loading' && <p className="muted">Loading Sleeper ADP…</p>}
                 {rankings.status === 'error' && (
                   <p className="mock-draft-simulator__err" role="alert">
-                    Could not load rankings. {rankings.message}
+                    Could not load ADP. {rankings.message}
                   </p>
                 )}
                 {rankings.status === 'ready' && (
                   <p className="muted mock-draft-simulator__meta">
-                    {rankings.data.count?.toLocaleString?.() ?? rankingsPlayers.length} players
+                    {rankings.data.count?.toLocaleString?.() ?? rankingsPlayers.length} players (Sleeper ADP)
                     {rankings.data.scrape_date && (
                       <>
                         {' '}
@@ -1208,8 +1349,7 @@ export default function MockDraft() {
                       onChange={(e) => setAutopickStrategy(e.target.value === 'owned' ? 'owned' : 'ecr')}
                       disabled={rankings.status !== 'ready'}
                     >
-                      <option value="ecr">ECR — best consensus rank available</option>
-                      <option value="owned">Chalk — highest % rostered, tie-break ECR</option>
+                      <option value="ecr">ADP — best Sleeper ADP available</option>
                     </select>
                   </label>
 
@@ -1287,7 +1427,7 @@ export default function MockDraft() {
                     slotOrderUserIds={slotOrderUserIds}
                     boardMaxRound={boardMaxRound}
                     draftPicks={draftPicks}
-                    keeperCostByUserRound={keeperCostByUserRound}
+                    keeperCostByUserRound={boardKeeperCostByUserRound}
                     lookup={lookup}
                     timedDraftActive={false}
                     currentPickMeta={currentPickMeta}
@@ -1310,7 +1450,7 @@ export default function MockDraft() {
                             <th scope="col">Team</th>
                             <th scope="col">Player</th>
                             <th scope="col">Pos</th>
-                            <th scope="col">ECR</th>
+                            <th scope="col">ADP</th>
                             <th scope="col"></th>
                           </tr>
                         </thead>
@@ -1322,7 +1462,11 @@ export default function MockDraft() {
                               <td>{labelByUserId.get(p.userId) || p.userId}</td>
                               <td>{p.name}</td>
                               <td>{p.pos}</td>
-                              <td className="tabular">{p.ecr ?? '—'}</td>
+                              <td className="tabular">
+                                {p.ecr != null && Number.isFinite(Number(p.ecr))
+                                  ? Number(p.ecr).toFixed(1)
+                                  : '—'}
+                              </td>
                               <td className="muted">{p.pickKind === 'user' ? 'manual' : ''}</td>
                             </tr>
                           ))}
@@ -1342,7 +1486,7 @@ export default function MockDraft() {
                                   <strong>{labelByUserId.get(p.userId)}</strong>: {p.name}{' '}
                                   <span className="muted">
                                     ({p.pos}
-                                    {p.ecr != null ? ` · ECR ${p.ecr}` : ''})
+                                    {p.ecr != null ? ` · ADP ${Number(p.ecr).toFixed(1)}` : ''})
                                   </span>
                                 </li>
                               ))}
@@ -1419,7 +1563,7 @@ export default function MockDraft() {
                 slotOrderUserIds={slotOrderUserIds}
                 boardMaxRound={boardMaxRound}
                 draftPicks={draftPicks}
-                keeperCostByUserRound={keeperCostByUserRound}
+                keeperCostByUserRound={boardKeeperCostByUserRound}
                 lookup={lookup}
                 timedDraftActive={timedDraftActive}
                 currentPickMeta={currentPickMeta}
