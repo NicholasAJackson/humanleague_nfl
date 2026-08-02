@@ -91,13 +91,26 @@ function shortManagerLabel(label) {
 function shortPlayerName(name) {
   const s = String(name || '').trim();
   if (!s) return '—';
-  if (s.length <= 14) return s;
-  const parts = s.split(/\s+/);
+  const parts = s.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) {
-    const compact = `${parts[0][0]}. ${parts[parts.length - 1]}`;
-    if (compact.length <= 14) return compact;
+    const first = parts[0].replace(/^[^A-Za-z0-9]+/, '');
+    const last = parts[parts.length - 1];
+    const initial = first ? `${first[0].toUpperCase()}.` : '';
+    return initial ? `${initial} ${last}` : last;
   }
-  return `${s.slice(0, 13)}…`;
+  if (s.length <= 12) return s;
+  return `${s.slice(0, 11)}…`;
+}
+
+/** Position tint class — same palette idea as Drafts board cells. */
+function mockDraftPosClass(posRaw) {
+  const p = String(posRaw || '').toUpperCase();
+  if (!p) return '';
+  if (p === 'DST' || p === 'DEF') return ' mock-draft-pos-dst';
+  if (p === 'WR' || p === 'RB' || p === 'QB' || p === 'TE' || p === 'K') {
+    return ` mock-draft-pos-${p.toLowerCase()}`;
+  }
+  return ' mock-draft-pos-other';
 }
 
 function BackIcon() {
@@ -126,9 +139,17 @@ function CollapseIcon() {
 
 function SearchIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="M20 20l-3.5-3.5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
     </svg>
   );
 }
@@ -246,6 +267,10 @@ function MockDraftBoardPanel({
                     currentPickMeta.userId === uid &&
                     !cell &&
                     !hasKeeperCost;
+                  const keeperPos =
+                    hasKeeperCost && !cell
+                      ? lookup?.get(keeperIds[0])?.position || lookup?.get(keeperIds[0])?.pos || ''
+                      : '';
                   const cellKeeper =
                     !cell &&
                     hasKeeperCost && (
@@ -253,11 +278,11 @@ function MockDraftBoardPanel({
                         {keeperIds.map((pid) => {
                           const meta = lookup?.get(pid);
                           const name = meta?.name || pid;
-                          const pos = meta?.position || '';
+                          const pos = meta?.position || meta?.pos || '';
                           const team = meta?.team || '';
                           return (
                             <div key={pid} className="mock-draft-board__keeper-cost-block">
-                              <span className="mock-draft-board__pick-name">
+                              <span className="mock-draft-board__pick-name" title={name}>
                                 {dense ? shortPlayerName(name) : fmtKeeperCostPlayer(pid, lookup)}
                               </span>
                               {dense ? (
@@ -279,12 +304,13 @@ function MockDraftBoardPanel({
                       className={
                         'mock-draft-board__cell' +
                         (highlightCell ? ' mock-draft-board__cell--pulse' : '') +
-                        (hasKeeperCost && !cell ? ' mock-draft-board__cell--keeper-cost' : '')
+                        (hasKeeperCost && !cell ? ' mock-draft-board__cell--keeper-cost' : '') +
+                        mockDraftPosClass(cell ? cell.pos : keeperPos)
                       }
                     >
                       {cell ? (
                         <>
-                          <span className="mock-draft-board__pick-name">
+                          <span className="mock-draft-board__pick-name" title={cell.name}>
                             {dense ? shortPlayerName(cell.name) : cell.name}
                           </span>
                           <span className="mock-draft-board__pick-meta muted">
@@ -1155,8 +1181,8 @@ export default function MockDraft() {
     return (
       <>
         <div className="mock-draft-live-filters">
-          <div className="mock-draft-live-toolbar">
-            {searchExpanded ? (
+          {searchExpanded ? (
+            <div className="mock-draft-live-toolbar mock-draft-live-toolbar--search">
               <label className="mock-draft-live-search">
                 <span className="visually-hidden">Search players</span>
                 <input
@@ -1164,20 +1190,30 @@ export default function MockDraft() {
                   type="search"
                   value={playerSearch}
                   onChange={(e) => setPlayerSearch(e.target.value)}
-                  onBlur={() => {
-                    if (!playerSearch.trim()) setPlayerSearchOpen(false);
-                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       setPlayerSearch('');
                       setPlayerSearchOpen(false);
                     }
                   }}
-                  placeholder="Search…"
+                  placeholder="Search players…"
                   autoComplete="off"
                 />
               </label>
-            ) : (
+              <button
+                type="button"
+                className="mock-draft-live-search-close"
+                aria-label="Close search"
+                onClick={() => {
+                  setPlayerSearch('');
+                  setPlayerSearchOpen(false);
+                }}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+          ) : (
+            <div className="mock-draft-live-toolbar">
               <button
                 type="button"
                 className="mock-draft-live-search-btn"
@@ -1186,22 +1222,22 @@ export default function MockDraft() {
               >
                 <SearchIcon />
               </button>
-            )}
-            <div className="mock-draft-live-pills" role="tablist" aria-label="Position filter">
-              {POSITION_FILTERS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  role="tab"
-                  aria-selected={playerPos === p}
-                  className={'mock-draft-live-pill' + (playerPos === p ? ' mock-draft-live-pill--active' : '')}
-                  onClick={() => setPlayerPos(p)}
-                >
-                  {p}
-                </button>
-              ))}
+              <div className="mock-draft-live-pills" role="tablist" aria-label="Position filter">
+                {POSITION_FILTERS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    role="tab"
+                    aria-selected={playerPos === p}
+                    className={'mock-draft-live-pill' + (playerPos === p ? ' mock-draft-live-pill--active' : '')}
+                    onClick={() => setPlayerPos(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <div className="mock-draft-live-table-scroll">
           <table className="mock-draft-live-table">
@@ -1252,7 +1288,15 @@ export default function MockDraft() {
                     {p.ecr != null && Number.isFinite(Number(p.ecr)) ? Number(p.ecr).toFixed(1) : '—'}
                   </td>
                   <td>{p.name}</td>
-                  <td className="muted mock-draft-live-table__pos">{p.pos ?? '—'}</td>
+                  <td className="mock-draft-live-table__pos">
+                    {p.pos ? (
+                      <span className={`mock-draft-pos-badge mock-draft-pos-badge--${String(p.pos).toLowerCase()}`}>
+                        {p.pos}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="muted">{p.team ?? '—'}</td>
                 </tr>
               ))}
