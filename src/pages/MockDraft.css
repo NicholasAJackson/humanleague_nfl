@@ -1275,13 +1275,66 @@
 }
 
 .mock-draft-live-table__ecr {
-  width: 3rem;
+  width: 2.6rem;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
 
 .mock-draft-live-table__pos {
-  width: 2.75rem;
+  width: 2.5rem;
+}
+
+.mock-draft-live-table__team {
+  width: 2.4rem;
+}
+
+.mock-draft-live-table__bye,
+.mock-draft-live-table__yr {
+  width: 2rem;
+  text-align: center;
+}
+
+.mock-draft-live-table__pts {
+  width: 2.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+}
+
+.mock-draft-live-table__player {
+  min-width: 0;
+}
+
+.mock-draft-live-table__name {
+  margin-right: 0.25rem;
+}
+
+.mock-draft-injury,
+.mock-draft-rookie {
+  display: inline-block;
+  margin-left: 0.15rem;
+  padding: 0.05rem 0.28rem;
+  border-radius: 4px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.mock-draft-injury--warn {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.mock-draft-injury--bad {
+  background: rgba(248, 113, 113, 0.22);
+  color: #f87171;
+}
+
+.mock-draft-rookie {
+  background: rgba(94, 234, 212, 0.18);
+  color: #5eead4;
 }
 
 .mock-draft-pos-badge {

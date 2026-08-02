@@ -375,7 +375,7 @@ function normalizeSleeperPos(raw) {
   return pos;
 }
 
-function normalizeSleeperAdpPlayer(row) {
+function normalizeSleeperAdpPlayer(row, byeByTeam) {
   const stats = row && row.stats && typeof row.stats === 'object' ? row.stats : {};
   const adp = toNum(stats.adp_half_ppr);
   if (adp == null || adp <= 0 || adp >= SLEEPER_ADP_MAX) return null;
@@ -386,6 +386,12 @@ function normalizeSleeperAdpPlayer(row) {
   const name = `${first} ${last}`.trim() || String(row.player_id || '');
   const pos = normalizeSleeperPos(player.position || (player.fantasy_positions || [])[0]);
   const sleeperId = row.player_id != null ? String(row.player_id) : null;
+  const team = String(player.team || row.team || '').trim();
+  const injury = String(player.injury_status || '').trim() || null;
+  const yearsExp = toNum(player.years_exp);
+  const ptsHalf = toNum(stats.pts_half_ppr);
+  const bye =
+    team && byeByTeam instanceof Map && byeByTeam.has(team) ? byeByTeam.get(team) : null;
 
   return {
     ecr: adp,
@@ -394,13 +400,55 @@ function normalizeSleeperAdpPlayer(row) {
     worst: null,
     name,
     pos,
-    team: String(player.team || row.team || '').trim(),
-    bye: null,
+    team,
+    bye,
+    pts_half_ppr: ptsHalf,
+    injury_status: injury,
+    years_exp: yearsExp,
     owned_avg: null,
     rank_delta: null,
     fp_id: null,
     sleeper_id: sleeperId,
   };
+}
+
+/** Derive each NFL team's bye week from the regular-season schedule (17 games / 18 weeks). */
+async function fetchTeamByeWeeks(season) {
+  const url = `https://api.sleeper.com/schedule/nfl/regular/${encodeURIComponent(season)}`;
+  const res = await fetch(url, {
+    headers: { 'user-agent': 'humanleague-nfl/rankings', accept: 'application/json' },
+  });
+  if (!res.ok) {
+    console.warn(`rankings: Sleeper schedule ${res.status} — bye weeks unavailable`);
+    return new Map();
+  }
+  const raw = await res.json();
+  const games = Array.isArray(raw) ? raw : [];
+  const weeksByTeam = new Map();
+  const allWeeks = new Set();
+  for (const g of games) {
+    const w = Number(g.week);
+    if (!Number.isFinite(w) || w < 1 || w > 18) continue;
+    allWeeks.add(w);
+    for (const t of [g.home, g.away]) {
+      const team = String(t || '').trim().toUpperCase();
+      if (!team) continue;
+      if (!weeksByTeam.has(team)) weeksByTeam.set(team, new Set());
+      weeksByTeam.get(team).add(w);
+    }
+  }
+  const weekList = [...allWeeks].sort((a, b) => a - b);
+  const byeByTeam = new Map();
+  for (const [team, weeks] of weeksByTeam) {
+    const missing = weekList.filter((w) => !weeks.has(w));
+    if (missing.length === 1) byeByTeam.set(team, missing[0]);
+    else if (missing.length > 1) {
+      // Prefer a mid-season missing week if schedule is incomplete at edges.
+      const mid = missing.find((w) => w >= 5 && w <= 14) ?? missing[0];
+      byeByTeam.set(team, mid);
+    }
+  }
+  return byeByTeam;
 }
 
 async function fetchSleeperAdpHalf() {
@@ -414,17 +462,24 @@ async function fetchSleeperAdpHalf() {
   }
 
   const url = `https://api.sleeper.com/projections/nfl/${season}?${params}`;
-  const res = await fetch(url, {
-    headers: { 'user-agent': 'humanleague-nfl/rankings', accept: 'application/json' },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Sleeper projections responded ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
+  const [projRes, byeByTeam] = await Promise.all([
+    fetch(url, {
+      headers: { 'user-agent': 'humanleague-nfl/rankings', accept: 'application/json' },
+    }),
+    fetchTeamByeWeeks(season).catch((err) => {
+      console.warn('rankings: bye week lookup failed', err);
+      return new Map();
+    }),
+  ]);
+
+  if (!projRes.ok) {
+    const body = await projRes.text().catch(() => '');
+    throw new Error(`Sleeper projections responded ${projRes.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
   }
 
-  const raw = await res.json();
+  const raw = await projRes.json();
   const rows = Array.isArray(raw) ? raw : [];
-  const players = rows.map(normalizeSleeperAdpPlayer).filter(Boolean);
+  const players = rows.map((row) => normalizeSleeperAdpPlayer(row, byeByTeam)).filter(Boolean);
   players.sort((a, b) => a.ecr - b.ecr);
 
   let latestMs = 0;

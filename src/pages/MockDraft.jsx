@@ -1058,6 +1058,21 @@ export default function MockDraft() {
         const ae = a.ecr ?? 99999;
         const be = b.ecr ?? 99999;
         if (ae !== be) return sign * (ae - be);
+      } else if (playerSort.key === 'pts') {
+        const ap = a.pts_half_ppr ?? -1;
+        const bp = b.pts_half_ppr ?? -1;
+        if (ap !== bp) return sign * (ap - bp);
+      } else if (playerSort.key === 'bye') {
+        const ab = a.bye ?? 99;
+        const bb = b.bye ?? 99;
+        if (ab !== bb) return sign * (ab - bb);
+      } else if (playerSort.key === 'years') {
+        const ay = a.years_exp ?? 99;
+        const by = b.years_exp ?? 99;
+        if (ay !== by) return sign * (ay - by);
+      } else if (playerSort.key === 'pos') {
+        const c = String(a.pos || '').localeCompare(String(b.pos || ''), undefined, { sensitivity: 'base' });
+        if (c !== 0) return sign * c;
       } else if (playerSort.key === 'name') {
         const c = String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
         if (c !== 0) return sign * c;
@@ -1254,52 +1269,110 @@ export default function MockDraft() {
                   </button>
                 </th>
                 <th scope="col" className="mock-draft-live-table__pos">
-                  Pos
+                  <button type="button" className="mock-draft-sort-th" onClick={() => togglePlayerSort('pos')}>
+                    {sortHeaderLabel('pos', 'Pos')}
+                  </button>
                 </th>
-                <th scope="col">
+                <th scope="col" className="mock-draft-live-table__team">
                   <button type="button" className="mock-draft-sort-th" onClick={() => togglePlayerSort('team')}>
                     {sortHeaderLabel('team', 'NFL')}
+                  </button>
+                </th>
+                <th scope="col" className="mock-draft-live-table__bye">
+                  <button type="button" className="mock-draft-sort-th" onClick={() => togglePlayerSort('bye')}>
+                    {sortHeaderLabel('bye', 'Bye')}
+                  </button>
+                </th>
+                <th scope="col" className="mock-draft-live-table__pts">
+                  <button
+                    type="button"
+                    className="mock-draft-sort-th"
+                    onClick={() => togglePlayerSort('pts')}
+                    title="Projected Half-PPR points"
+                  >
+                    {sortHeaderLabel('pts', 'Proj')}
+                  </button>
+                </th>
+                <th scope="col" className="mock-draft-live-table__yr">
+                  <button type="button" className="mock-draft-sort-th" onClick={() => togglePlayerSort('years')}>
+                    {sortHeaderLabel('years', 'Yr')}
                   </button>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {sortedPoolTableRows.map((p) => (
-                <tr
-                  key={String(p.sleeper_id)}
-                  className={
-                    'mock-draft-live-table__row' + (canPick ? ' mock-draft-live-table__row--pickable' : '')
-                  }
-                  onClick={canPick ? () => onManualDraftPlayer(p) : undefined}
-                  onKeyDown={
-                    canPick
-                      ? (e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            onManualDraftPlayer(p);
+              {sortedPoolTableRows.map((p) => {
+                const injury = String(p.injury_status || '').trim();
+                const years = p.years_exp;
+                const isRookie = years === 0;
+                return (
+                  <tr
+                    key={String(p.sleeper_id)}
+                    className={
+                      'mock-draft-live-table__row' + (canPick ? ' mock-draft-live-table__row--pickable' : '')
+                    }
+                    onClick={canPick ? () => onManualDraftPlayer(p) : undefined}
+                    onKeyDown={
+                      canPick
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onManualDraftPlayer(p);
+                            }
                           }
-                        }
-                      : undefined
-                  }
-                  tabIndex={canPick ? 0 : undefined}
-                  role={canPick ? 'button' : undefined}
-                >
-                  <td className="tabular mock-draft-live-table__ecr">
-                    {p.ecr != null && Number.isFinite(Number(p.ecr)) ? Number(p.ecr).toFixed(1) : '—'}
-                  </td>
-                  <td>{p.name}</td>
-                  <td className="mock-draft-live-table__pos">
-                    {p.pos ? (
-                      <span className={`mock-draft-pos-badge mock-draft-pos-badge--${String(p.pos).toLowerCase()}`}>
-                        {p.pos}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="muted">{p.team ?? '—'}</td>
-                </tr>
-              ))}
+                        : undefined
+                    }
+                    tabIndex={canPick ? 0 : undefined}
+                    role={canPick ? 'button' : undefined}
+                  >
+                    <td className="tabular mock-draft-live-table__ecr">
+                      {p.ecr != null && Number.isFinite(Number(p.ecr)) ? Number(p.ecr).toFixed(1) : '—'}
+                    </td>
+                    <td className="mock-draft-live-table__player">
+                      <span className="mock-draft-live-table__name">{p.name}</span>
+                      {injury ? (
+                        <span
+                          className={
+                            'mock-draft-injury' +
+                            (['Out', 'IR', 'PUP', 'Suspended', 'Covid'].includes(injury)
+                              ? ' mock-draft-injury--bad'
+                              : ' mock-draft-injury--warn')
+                          }
+                          title={injury}
+                        >
+                          {injury === 'Questionable' ? 'Q' : injury === 'Doubtful' ? 'D' : injury.slice(0, 3)}
+                        </span>
+                      ) : null}
+                      {isRookie ? (
+                        <span className="mock-draft-rookie" title="Rookie">
+                          R
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="mock-draft-live-table__pos">
+                      {p.pos ? (
+                        <span className={`mock-draft-pos-badge mock-draft-pos-badge--${String(p.pos).toLowerCase()}`}>
+                          {p.pos}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="muted mock-draft-live-table__team">{p.team ?? '—'}</td>
+                    <td className="tabular muted mock-draft-live-table__bye">
+                      {p.bye != null && Number.isFinite(Number(p.bye)) ? Number(p.bye) : '—'}
+                    </td>
+                    <td className="tabular mock-draft-live-table__pts">
+                      {p.pts_half_ppr != null && Number.isFinite(Number(p.pts_half_ppr))
+                        ? Math.round(Number(p.pts_half_ppr))
+                        : '—'}
+                    </td>
+                    <td className="tabular muted mock-draft-live-table__yr">
+                      {isRookie ? 'R' : years != null && Number.isFinite(Number(years)) ? Number(years) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
