@@ -147,17 +147,19 @@ export function positionFillsStarterNeed(pos, needs) {
 }
 
 /**
- * Jitter ranks so two teams sharing a source still disagree slightly (FP-style variety).
- * Keep sigma small — large jitter is what drops studs several rounds.
+ * Jitter ranks so two teams sharing a source still disagree slightly.
+ * Keep early-board noise tiny so ADP order stays intact for studs.
  * @param {object[]} players — share `ecr` rank field
  */
-export function jitterRankingBoard(players, rng = Math.random, sigma = 1.5) {
+export function jitterRankingBoard(players, rng = Math.random, sigma = 0.55) {
   const list = (players || [])
     .filter((p) => p && p.sleeper_id)
     .map((p) => {
       const base = Number(p.ecr);
       const rank = Number.isFinite(base) ? base : 9999;
-      const noise = (rng() + rng() + rng() - 1.5) * (2 * sigma); // rough triangular
+      // Top ~2 rounds: almost no shuffle. Mid board: light noise.
+      const scale = rank <= 12 ? 0.2 : rank <= 36 ? 0.55 : 1;
+      const noise = (rng() + rng() + rng() - 1.5) * (2 * sigma) * scale;
       return { ...p, ecr: Math.max(0.1, rank + noise) };
     });
   list.sort((a, b) => (a.ecr ?? 99999) - (b.ecr ?? 99999));
@@ -214,12 +216,12 @@ export function scoreFantasyProsCandidate(player, boardRank, needs, scarcityByPo
     needAdj -= (4 - scarce) * 1.0;
   }
 
-  // Early board = stickier. Need can nudge, not rewrite the first few rounds.
-  const needScale = rank <= 12 ? 0.35 : rank <= 36 ? 0.65 : 1;
-  needAdj = Math.max(-5, Math.min(14, needAdj * needScale));
+  // Early board = stick to ADP. Need can nudge mid/late, not rewrite studs.
+  const needScale = rank <= 24 ? 0.12 : rank <= 48 ? 0.45 : 1;
+  needAdj = Math.max(-4, Math.min(14, needAdj * needScale));
   score += needAdj;
 
-  score += (rng() - 0.5) * 1;
+  score += (rng() - 0.5) * (rank <= 24 ? 0.25 : 0.8);
   return score;
 }
 
@@ -273,9 +275,18 @@ export function pickFantasyProsStyle({
   );
   if (!available.length) return null;
 
+  // Sort by board ADP first so "top available" is unambiguous.
+  const byBoard = [...available].sort((a, b) => (a.ecr ?? 99999) - (b.ecr ?? 99999));
+  const bpa = byBoard[0];
+  const bpaRank = Number(bpa?.ecr);
+  // Rounds 1–3 territory: take best ADP on the sheet. Need should not leapfrog JSN for Cook/Collins.
+  if (Number.isFinite(bpaRank) && bpaRank <= 24) {
+    return bpa;
+  }
+
   const needs = rosterStarterNeeds(teamRoster, starterSlots);
-  const scarcity = scarcityAmongTop(available);
-  const scored = available.map((player, idx) => {
+  const scarcity = scarcityAmongTop(byBoard);
+  const scored = byBoard.map((player, idx) => {
     const boardRank = Number.isFinite(Number(player.ecr)) ? Number(player.ecr) : idx + 1;
     return {
       player,
@@ -283,7 +294,8 @@ export function pickFantasyProsStyle({
     };
   });
   scored.sort((a, b) => a.score - b.score);
-  return weightedPickFromScored(scored, rng, windowSize);
+  const win = Number.isFinite(bpaRank) && bpaRank <= 48 ? Math.min(2, windowSize) : windowSize;
+  return weightedPickFromScored(scored, rng, win);
 }
 
 /**

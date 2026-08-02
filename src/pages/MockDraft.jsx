@@ -640,14 +640,14 @@ export default function MockDraft() {
 
     (async () => {
       try {
-        const [sleeper, dynasty, fp] = await Promise.all([
+        const [sleeper] = await Promise.all([
           loadBoard('sleeper-adp-half', 'sleeper-adp', 'Sleeper ADP (Half-PPR)'),
-          loadBoard('redraft-overall', 'dynastyprocess-ecr', 'DynastyProcess redraft ECR').catch(() => null),
-          loadBoard('fp-ecr-half', 'fp-ecr', 'FantasyPros live ECR (Half-PPR)').catch(() => null),
         ]);
         if (cancelled) return;
         if (!sleeper) throw new Error('Could not load Sleeper ADP');
-        const boards = [sleeper, dynasty, fp].filter(Boolean);
+        // CPU cheat sheets use Sleeper ADP only — alternate ECR boards were letting
+        // mid-ADP names (e.g. Collins) leapfrog early Sleeper ADP (e.g. JSN).
+        const boards = [sleeper];
         setRankings({
           status: 'ready',
           data: {
