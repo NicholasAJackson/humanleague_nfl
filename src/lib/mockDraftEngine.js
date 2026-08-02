@@ -10,6 +10,27 @@ export function shuffleDraftSlots(userIds, rng = Math.random) {
   return a;
 }
 
+/**
+ * Place `fixedUserId` at `fixedSlotIndex` (0-based round-1 pick), shuffle everyone else into the remaining slots.
+ */
+export function shuffleDraftSlotsWithFixed(userIds, fixedUserId, fixedSlotIndex, rng = Math.random) {
+  const ids = [...new Set((userIds || []).map(String).filter(Boolean))];
+  const fixed = String(fixedUserId || '');
+  if (!fixed || !ids.includes(fixed)) return shuffleDraftSlots(ids, rng);
+  const n = ids.length;
+  const slot = Math.max(0, Math.min(n - 1, Math.floor(Number(fixedSlotIndex)) || 0));
+  const others = shuffleDraftSlots(
+    ids.filter((id) => id !== fixed),
+    rng,
+  );
+  const out = new Array(n);
+  let oi = 0;
+  for (let i = 0; i < n; i++) {
+    out[i] = i === slot ? fixed : others[oi++];
+  }
+  return out;
+}
+
 /** Round 1 = slot index order 0..n-1; round 2 = reverse; snake thereafter. */
 export function snakeRoundUserIds(slotOrderUserIds, roundNumber) {
   const n = slotOrderUserIds.length;

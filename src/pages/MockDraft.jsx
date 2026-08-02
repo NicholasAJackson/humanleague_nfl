@@ -4,7 +4,7 @@ import { areKeeperNominationsHiddenInUi, config, leagueFormat } from '../config.
 import { buildDevMockKeeperNominations } from '../lib/devMockKeeperNominations.js';
 import { findLatestSeasonWithSnakePicks, buildDraftSlotByPlayerId } from '../lib/drafts.js';
 import {
-  shuffleDraftSlots,
+  shuffleDraftSlotsWithFixed,
   simulateSnakeDraft,
   buildPickQueue,
   draftPickRecord,
@@ -23,20 +23,6 @@ const useDevKeeperMocks = import.meta.env.DEV;
 const POSITION_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DST'];
 
 const DEFAULT_PICK_SECONDS = 90;
-
-function fmtNominationRow(n, lookup) {
-  if (n.nomination_kind === 'freeform') {
-    return [n.k1_text, n.k2_text, n.k3_text].filter(Boolean).join(' · ');
-  }
-  const ids = [n.k1_player_id, n.k2_player_id, n.k3_player_id].filter(Boolean);
-  if (!lookup) return ids.join(' · ');
-  return ids
-    .map((id) => {
-      const x = lookup.get(id);
-      return x ? `${x.name} (${x.position || '?'})` : id;
-    })
-    .join(' · ');
-}
 
 /** Map a locked-in keeper_finals row → nomination shape the mock engine already understands (k1 + second only). */
 function finalToMockNomination(final) {
@@ -395,6 +381,8 @@ export default function MockDraft() {
   const [keeperCostDraft, setKeeperCostDraft] = useState({ status: 'idle' });
 
   const [myTeamUserId, setMyTeamUserId] = useState('');
+  /** 0-based round-1 pick slot; '' until chosen. */
+  const [myPickSlot, setMyPickSlot] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
   const [playerSearchOpen, setPlayerSearchOpen] = useState(false);
   const playerSearchInputRef = useRef(null);
@@ -739,13 +727,6 @@ export default function MockDraft() {
     lockedSleeperUserId,
   ]);
 
-  const usingLockedInFinals = useMemo(() => {
-    if (useDevKeeperMocks) return false;
-    const carry =
-      towardSeason != null && Number.isFinite(towardSeason) ? String(towardSeason) : null;
-    return finalRowsRaw.some((f) => (carry ? String(f.carry_into_season) === carry : true));
-  }, [finalRowsRaw, towardSeason, useDevKeeperMocks]);
-
   const nominationByUserId = useMemo(() => {
     const m = new Map();
     for (const n of nominationsEffective) {
@@ -800,10 +781,12 @@ export default function MockDraft() {
     usersLoading ||
     (useDevKeeperMocks ? rostersLoading : nomLoading || finalsLoading);
 
-  const randomizeOrder = useCallback(() => {
+  const applyDraftOrder = useCallback(() => {
     if (timedDraftActive) return;
+    if (!myTeamUserId || myPickSlot === '') return;
     const ids = sortedUsers.map((u) => u.user_id).filter(Boolean);
-    setSlotOrderUserIds(shuffleDraftSlots(ids));
+    if (!ids.includes(myTeamUserId)) return;
+    setSlotOrderUserIds(shuffleDraftSlotsWithFixed(ids, myTeamUserId, Number(myPickSlot)));
     setDraftPicks([]);
     setPickQueue([]);
     setPickCursor(0);
@@ -811,7 +794,13 @@ export default function MockDraft() {
     setDraftPoolExhausted(false);
     teamBoardsRef.current = null;
     setTeamBoards(null);
-  }, [sortedUsers, timedDraftActive]);
+  }, [sortedUsers, timedDraftActive, myTeamUserId, myPickSlot]);
+
+  useEffect(() => {
+    if (timedDraftActive) return;
+    if (!myTeamUserId || myPickSlot === '') return;
+    applyDraftOrder();
+  }, [myTeamUserId, myPickSlot, applyDraftOrder, timedDraftActive]);
 
   const ensureTeamBoards = useCallback(() => {
     if (!slotOrderUserIds?.length || rankingBoards.length === 0) return null;
@@ -1404,27 +1393,7 @@ export default function MockDraft() {
 
       {config.leagueId && !chainLoading && chain[0] && (
         <>
-          <section className="mock-draft-meta card mock-draft-card">
-            <div>
-              <span className="mock-draft-meta__label">Roster season</span>
-              <span className="mock-draft-meta__value">
-                {chain[0].season}
-                {chain[0].name ? ` · ${chain[0].name}` : ''}
-              </span>
-            </div>
-            {towardSeason != null && Number.isFinite(towardSeason) && (
-              <div>
-                <span className="mock-draft-meta__label">Drafting toward</span>
-                <span className="mock-draft-meta__value">{towardSeason}</span>
-              </div>
-            )}
-            <div>
-              <span className="mock-draft-meta__label">Rounds</span>
-              <span className="mock-draft-meta__value">{leagueFormat.draftRounds}</span>
-            </div>
-          </section>
-
-          {loadingAny && <p className="muted">Loading managers and keepers…</p>}
+          {loadingAny && <p className="muted">Loading…</p>}
 
           {!loadingAny && sortedUsers.length === 0 && (
             <p className="muted">No managers found for this league season.</p>
@@ -1432,41 +1401,6 @@ export default function MockDraft() {
 
           {!loadingAny && sortedUsers.length > 0 && (
             <>
-              <details className="card mock-draft-card mock-draft-keepers-details">
-                <summary className="mock-draft-keepers-details__summary">
-                  {usingLockedInFinals ? 'Locked-in keepers by team' : 'Keepers by team'}
-                </summary>
-                <ul className="mock-draft-team-grid mock-draft-team-grid--nested">
-                  {sortedUsers.map((u) => {
-                    const label = u.metadata?.team_name || u.display_name || u.user_id;
-                    const nom = nominationByUserId.get(u.user_id);
-                    const keeperLine = nom ? fmtNominationRow(nom, lookup) : null;
-                    const hideOthersKeepers =
-                      nominationsHidden &&
-                      !useDevKeeperMocks &&
-                      !isCommissioner &&
-                      lockedSleeperUserId &&
-                      u.user_id !== lockedSleeperUserId;
-                    return (
-                      <li key={u.user_id} className="card mock-draft-team-card">
-                        <h2 className="mock-draft-team-card__title">{label}</h2>
-                        {!nom && (
-                          <p className="muted mock-draft-team-card__keepers">
-                            {hideOthersKeepers ? '—' : 'None'}
-                          </p>
-                        )}
-                        {nom && !keeperLine && (
-                          <p className="muted mock-draft-team-card__keepers">None</p>
-                        )}
-                        {keeperLine && (
-                          <p className="mock-draft-team-card__keepers">{keeperLine}</p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </details>
-
               <section className="card mock-draft-card mock-draft-simulator">
                 <h2 className="mock-draft-simulator__title">Draft room</h2>
 
@@ -1483,7 +1417,9 @@ export default function MockDraft() {
                     <select
                       value={myTeamUserId}
                       disabled={Boolean(lockedSleeperUserId) || timedDraftActive}
-                      onChange={(e) => setMyTeamUserId(e.target.value)}
+                      onChange={(e) => {
+                        setMyTeamUserId(e.target.value);
+                      }}
                     >
                       <option value="">Select team…</option>
                       {sortedUsers.map((u) => (
@@ -1491,6 +1427,39 @@ export default function MockDraft() {
                           {u.metadata?.team_name || u.display_name || u.user_id}
                         </option>
                       ))}
+                    </select>
+                  </label>
+                  <label className="mock-draft-control mock-draft-control--inline">
+                    <span className="mock-draft-control__label">Your pick</span>
+                    <select
+                      value={myPickSlot === '' ? '' : String(myPickSlot)}
+                      disabled={!myTeamUserId || timedDraftActive}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMyPickSlot(v === '' ? '' : Number(v));
+                      }}
+                    >
+                      <option value="">Pick #…</option>
+                      {sortedUsers.map((_, i) => {
+                        const n = i + 1;
+                        const mod100 = n % 100;
+                        const suffix =
+                          mod100 >= 11 && mod100 <= 13
+                            ? 'th'
+                            : n % 10 === 1
+                              ? 'st'
+                              : n % 10 === 2
+                                ? 'nd'
+                                : n % 10 === 3
+                                  ? 'rd'
+                                  : 'th';
+                        return (
+                          <option key={i} value={i}>
+                            {n}
+                            {suffix} overall
+                          </option>
+                        );
+                      })}
                     </select>
                   </label>
                 </div>
@@ -1512,8 +1481,13 @@ export default function MockDraft() {
                   </label>
 
                   <div className="mock-draft-actions">
-                    <button type="button" className="btn btn-secondary" onClick={randomizeOrder} disabled={timedDraftActive}>
-                      Randomize draft order
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={applyDraftOrder}
+                      disabled={timedDraftActive || !myTeamUserId || myPickSlot === ''}
+                    >
+                      {slotOrderUserIds?.length ? 'Reshuffle others' : 'Set draft order'}
                     </button>
                     <button type="button" className="btn btn-secondary" onClick={resetDraftOnly} disabled={timedDraftActive}>
                       Clear board
@@ -1563,9 +1537,9 @@ export default function MockDraft() {
                     <h3 className="mock-draft-order__heading">Draft order</h3>
                     <ol className="mock-draft-order__list">
                       {slotOrderUserIds.map((uid, i) => (
-                        <li key={`${uid}-${i}`}>
-                          <span className="mock-draft-order__slot">{i + 1}.</span>
+                        <li key={`${uid}-${i}`} className={uid === myTeamUserId ? 'mock-draft-order__you' : undefined}>
                           <span>{labelByUserId.get(uid) || uid}</span>
+                          {uid === myTeamUserId ? <span className="mock-draft-order__tag">you</span> : null}
                         </li>
                       ))}
                     </ol>

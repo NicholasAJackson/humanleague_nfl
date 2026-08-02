@@ -24,9 +24,9 @@ export const leagueFormat = {
   starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1 },
 };
 
-/** Mock draft: commissioners + testers; local dev allows session bypass (see AuthContext). */
+/** Mock draft: any signed-in member; local dev allows session bypass (see AuthContext). */
 export function canAccessMockDraft(user, devBypass) {
-  if (user?.role === 'commissioner' || user?.role === 'tester') return true;
+  if (user) return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
 }

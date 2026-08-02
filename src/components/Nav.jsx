@@ -9,16 +9,22 @@ const primaryItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
   { to: '/me', label: 'My team', icon: MyTeamIcon },
   { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
-  { to: '/keepers', label: 'Keepers', icon: KeeperIcon },
+  { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, requires: 'mockDraft' },
 ];
 
 const overflowItems = [
   { to: '/stats', label: 'Stats', icon: StatsIcon },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
-  { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, requires: 'mockDraft' },
+  { to: '/keepers', label: 'Keepers', icon: KeeperIcon },
   { to: '/keeper-ceremony', label: 'Ceremony', icon: CeremonyIcon, requires: 'ceremony' },
   { to: '/rules', label: 'Rules', icon: RulesIcon },
 ];
+
+function itemVisible(item, user, devBypass) {
+  if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass);
+  if (item.requires === 'ceremony') return canAccessKeeperCeremony(user, devBypass);
+  return true;
+}
 
 export default function Nav() {
   const { authEnabled, authenticated, devBypass, refresh, user } = useAuth();
@@ -27,13 +33,15 @@ export default function Nav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const showLogout = authEnabled && authenticated && !devBypass;
 
-  const overflowVisible = useMemo(() => {
-    return overflowItems.filter((item) => {
-      if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass);
-      if (item.requires === 'ceremony') return canAccessKeeperCeremony(user, devBypass);
-      return true;
-    });
-  }, [user, devBypass]);
+  const primaryVisible = useMemo(
+    () => primaryItems.filter((item) => itemVisible(item, user, devBypass)),
+    [user, devBypass],
+  );
+
+  const overflowVisible = useMemo(
+    () => overflowItems.filter((item) => itemVisible(item, user, devBypass)),
+    [user, devBypass],
+  );
 
   const overflowPaths = useMemo(() => new Set(overflowVisible.map((i) => i.to)), [overflowVisible]);
 
@@ -51,7 +59,7 @@ export default function Nav() {
   return (
     <nav className={'bottom-nav' + (showLogout ? ' bottom-nav--auth' : '')} aria-label="Primary">
       <ul>
-        {primaryItems.map(({ to, label, icon: Icon, end }) => (
+        {primaryVisible.map(({ to, label, icon: Icon, end }) => (
           <li key={to}>
             <NavLink
               to={to}

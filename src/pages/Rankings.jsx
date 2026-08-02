@@ -13,11 +13,13 @@ import {
 import './Rankings.css';
 
 const VIEW_OPTIONS = [
-  { value: 'redraft', label: 'Redraft rankings' },
-  { value: 'fp-ecr', label: 'FP live ECR (Half-PPR)' },
+  { value: 'redraft', label: 'Redraft rankings', hidden: true },
+  { value: 'fp-ecr', label: 'FP live ECR (Half-PPR)', hidden: true },
   { value: 'sleeper-adp', label: 'Sleeper ADP (Half-PPR)' },
-  { value: 'keeper', label: 'Keeper: draft vs consensus' },
+  { value: 'keeper', label: 'Keeper: draft vs consensus', hidden: true },
 ];
+
+const VISIBLE_VIEW_OPTIONS = VIEW_OPTIONS.filter((o) => !o.hidden);
 
 /** Map UI view → /api/rankings?page_type= (keeper always uses DynastyProcess redraft). */
 function pageTypeForView(view) {
@@ -181,7 +183,7 @@ function SortTh({ sortKey, sortState, onSort, alignEnd, title, className, childr
 }
 
 export default function Rankings() {
-  const [view, setView] = useState('redraft');
+  const [view, setView] = useState('sleeper-adp');
   const [position, setPosition] = useState('ALL');
   const [managerFilter, setManagerFilter] = useState('ALL');
   const [search, setSearch] = useState('');
@@ -463,16 +465,18 @@ export default function Rankings() {
       </header>
 
       <section className="card rankings-controls">
-        <label className="rankings-control">
-          <span className="rankings-control__label">View</span>
-          <select value={view} onChange={(e) => setView(e.target.value)}>
-            {VIEW_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {VISIBLE_VIEW_OPTIONS.length > 1 && (
+          <label className="rankings-control">
+            <span className="rankings-control__label">View</span>
+            <select value={view} onChange={(e) => setView(e.target.value)}>
+              {VISIBLE_VIEW_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {isKeeperView && keeper.managerOptions?.length > 0 && (
           <label className="rankings-control rankings-control--manager">
             <span className="rankings-control__label">Manager</span>

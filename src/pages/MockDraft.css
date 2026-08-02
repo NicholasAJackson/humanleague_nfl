@@ -205,6 +205,20 @@
   font-variant-numeric: tabular-nums;
 }
 
+.mock-draft-order__you {
+  font-weight: 700;
+  color: #86efac;
+}
+
+.mock-draft-order__tag {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5eead4;
+}
+
 .mock-draft-results__heading {
   margin: 1rem 0 0.5rem;
   font-size: 1rem;
