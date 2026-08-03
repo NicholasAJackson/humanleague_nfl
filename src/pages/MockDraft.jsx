@@ -797,10 +797,10 @@ export default function MockDraft() {
   }, [sortedUsers, timedDraftActive, myTeamUserId, myPickSlot]);
 
   useEffect(() => {
-    if (timedDraftActive) return;
+    if (timedDraftActive || draftRoomOpen) return;
     if (!myTeamUserId || myPickSlot === '') return;
     applyDraftOrder();
-  }, [myTeamUserId, myPickSlot, applyDraftOrder, timedDraftActive]);
+  }, [myTeamUserId, myPickSlot, applyDraftOrder, timedDraftActive, draftRoomOpen]);
 
   const ensureTeamBoards = useCallback(() => {
     if (!slotOrderUserIds?.length || rankingBoards.length === 0) return null;
@@ -1000,7 +1000,7 @@ export default function MockDraft() {
   useEffect(() => {
     if (timedDraftActive && pickCursor >= pickQueue.length && pickQueue.length > 0) {
       setTimedDraftActive(false);
-      setBoardExpanded(false);
+      setBoardExpanded(true);
       setLiveMobileDockTab('roster');
     }
   }, [timedDraftActive, pickCursor, pickQueue.length]);
