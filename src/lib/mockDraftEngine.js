@@ -270,9 +270,19 @@ export function pickFantasyProsStyle({
   starterSlots = leagueFormat.starterSlots,
   windowSize = 3,
 }) {
-  const available = (boardPlayers || []).filter(
-    (p) => p?.sleeper_id && !takenIds.has(String(p.sleeper_id)),
-  );
+  const counts = { QB: 0, RB: 0, WR: 0, TE: 0, DST: 0 };
+  for (const p of teamRoster || []) {
+    const pos = normalizeDraftPos(p.pos || p.position);
+    if (counts[pos] != null) counts[pos] += 1;
+  }
+
+  const available = (boardPlayers || []).filter((p) => {
+    if (!p?.sleeper_id || takenIds.has(String(p.sleeper_id))) return false;
+    const pos = normalizeDraftPos(p.pos);
+    // Half-PPR 1QB leagues: never draft a 3rd QB (keepers count).
+    if (pos === 'QB' && counts.QB >= 2) return false;
+    return true;
+  });
   if (!available.length) return null;
 
   // Sort by board ADP first so "top available" is unambiguous.
