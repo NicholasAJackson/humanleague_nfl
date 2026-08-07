@@ -59,9 +59,9 @@ export function canAccessRules() {
   return SHOW_RULES_PAGE;
 }
 
-/** Trade analyzer: commissioners only for now (flip when opening to managers). */
+/** Trade analyzer: commissioners + testers for now (flip when opening to managers). */
 export function canAccessTradeAnalyzer(user, devBypass) {
-  if (user?.role === 'commissioner') return true;
+  if (user?.role === 'commissioner' || user?.role === 'tester') return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
 }
