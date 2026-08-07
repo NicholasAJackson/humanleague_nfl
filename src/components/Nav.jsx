@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
-import { canAccessMockDraft, canAccessKeeperCeremony } from '../config.js';
+import { canAccessMockDraft, canAccessKeeperCeremony, canAccessTradeAnalyzer, canAccessKeepers, canAccessRules } from '../config.js';
 import BottomSheet from './BottomSheet.jsx';
 import './Nav.css';
 
@@ -14,16 +14,19 @@ const primaryItems = [
 
 const overflowItems = [
   { to: '/stats', label: 'Stats', icon: StatsIcon },
-  { to: '/trades', label: 'Trades', icon: TradeIcon },
+  { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
-  { to: '/keepers', label: 'Keepers', icon: KeeperIcon },
+  { to: '/keepers', label: 'Keepers', icon: KeeperIcon, requires: 'keepers' },
   { to: '/keeper-ceremony', label: 'Ceremony', icon: CeremonyIcon, requires: 'ceremony' },
-  { to: '/rules', label: 'Rules', icon: RulesIcon },
+  { to: '/rules', label: 'Rules', icon: RulesIcon, requires: 'rules' },
 ];
 
 function itemVisible(item, user, devBypass) {
   if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass);
   if (item.requires === 'ceremony') return canAccessKeeperCeremony(user, devBypass);
+  if (item.requires === 'trades') return canAccessTradeAnalyzer(user, devBypass);
+  if (item.requires === 'keepers') return canAccessKeepers();
+  if (item.requires === 'rules') return canAccessRules();
   return true;
 }
 

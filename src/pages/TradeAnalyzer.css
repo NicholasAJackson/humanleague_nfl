@@ -4,6 +4,114 @@
   gap: var(--space-4);
 }
 
+.trade-help {
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 116, 139, 0.16);
+  background: rgba(15, 22, 40, 0.45);
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.trade-help[open] {
+  border-color: rgba(56, 189, 248, 0.28);
+  background: rgba(15, 22, 40, 0.7);
+}
+
+.trade-help__summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  user-select: none;
+  outline: none;
+  font-size: var(--fs-sm);
+  color: var(--color-text-dim);
+}
+
+.trade-help__summary::-webkit-details-marker {
+  display: none;
+}
+
+.trade-help__summary:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.55);
+  outline-offset: -2px;
+}
+
+.trade-help__summary:hover {
+  color: var(--color-text);
+}
+
+.trade-help__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.trade-help__label {
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.trade-help__hint {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--color-text-dim);
+}
+
+.trade-help[open] .trade-help__hint {
+  opacity: 0;
+}
+
+.trade-help__chevron {
+  color: var(--color-text-dim);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.trade-help[open] .trade-help__chevron {
+  transform: rotate(180deg);
+}
+
+.trade-help__body {
+  padding: 0 14px 14px;
+  border-top: 1px solid rgba(100, 116, 139, 0.12);
+}
+
+.trade-help__steps {
+  margin: 12px 0 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--color-text-dim);
+  line-height: 1.45;
+}
+
+.trade-help__steps strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.trade-help__note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-xs);
+}
+
 .trade-source {
   margin: var(--space-2) 0 0;
   font-size: var(--fs-sm);
@@ -549,4 +657,130 @@
 .trade-finder__item .btn {
   flex-shrink: 0;
   align-self: center;
+}
+
+.trade-hype {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.trade-hype__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.trade-hype__sub {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-sm);
+}
+
+.trade-hype__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.trade-hype__player {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.trade-hype__player-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.trade-hype__name {
+  display: block;
+  font-size: var(--fs-base);
+}
+
+.trade-hype__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--color-text-dim);
+}
+
+.trade-hype__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.trade-hype__badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+}
+
+.trade-hype__badge--add {
+  color: var(--color-success);
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.trade-hype__badge--drop {
+  color: var(--color-danger);
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.trade-hype__trends {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-dim);
+}
+
+.trade-hype__trends li + li {
+  margin-top: 2px;
+}
+
+.trade-hype__news {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trade-hype__news a,
+.trade-hype__news span {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+  line-height: 1.35;
+}
+
+.trade-hype__news a:hover {
+  text-decoration: underline;
+}
+
+.trade-hype__news span:not(.trade-hype__when) {
+  color: var(--color-text);
+}
+
+.trade-hype__when {
+  display: inline-block;
+  margin-left: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--color-text-mute);
 }

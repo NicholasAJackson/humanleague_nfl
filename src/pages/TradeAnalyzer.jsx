@@ -13,10 +13,17 @@ import {
   scoreTradeRosterImpact,
 } from '../lib/rosterNeeds.js';
 import { findTradeSuggestions } from '../lib/tradeFinder.js';
+import {
+  matchTradeHype,
+  formatTrendLabel,
+  formatHoursAgo,
+} from '../lib/tradeHype.js';
 import './TradeAnalyzer.css';
 
 const MAX_PER_SIDE = 5;
 const NONE = '';
+/** Flip when re-enabling ESPN news + Sleeper trending on the analyzer. */
+const SHOW_TRADE_HYPE = false;
 
 function formatScrapeDate(iso) {
   if (!iso) return null;
@@ -88,13 +95,14 @@ function SidePanel({
   total,
   bonus,
   poolLabel,
-  search,
-  onSearchChange,
-  suggestions,
+  options,
   onAdd,
   onRemove,
   disabled,
 }) {
+  const full = players.length >= MAX_PER_SIDE;
+  const canPick = !disabled && !full && options.length > 0;
+
   return (
     <section className="trade-side card" aria-labelledby={`trade-side-${sideKey}`}>
       <header className="trade-side__head">
@@ -112,37 +120,37 @@ function SidePanel({
 
       <label className="trade-control">
         <span className="trade-control__label">Add player</span>
-        <input
-          type="search"
-          enterKeyHint="search"
-          autoComplete="off"
-          placeholder={players.length >= MAX_PER_SIDE ? 'Side full (5 max)' : 'Search name…'}
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          disabled={disabled || players.length >= MAX_PER_SIDE}
-        />
+        <select
+          value=""
+          disabled={!canPick}
+          onChange={(e) => {
+            const key = e.target.value;
+            if (!key) return;
+            const hit = options.find((p) => playerKey(p) === key);
+            if (hit) onAdd(hit);
+          }}
+        >
+          <option value="">
+            {full
+              ? 'Side full (5 max)'
+              : !options.length
+                ? 'No players available'
+                : 'Select a player…'}
+          </option>
+          {options.map((p) => {
+            const key = playerKey(p);
+            const val = ecrToTradeValue(p.ecr).toFixed(1);
+            const meta = [p.pos, p.team, p.ecr != null ? `ECR ${p.ecr}` : null, val]
+              .filter(Boolean)
+              .join(' · ');
+            return (
+              <option key={key} value={key}>
+                {p.name} — {meta}
+              </option>
+            );
+          })}
+        </select>
       </label>
-
-      {search.trim() && suggestions.length > 0 && (
-        <ul className="trade-suggest" role="listbox">
-          {suggestions.map((p) => (
-            <li key={playerKey(p)}>
-              <button type="button" className="trade-suggest__btn" onClick={() => onAdd(p)}>
-                <span className="trade-suggest__name">{p.name}</span>
-                <span className="trade-suggest__meta">
-                  {p.pos || '—'}
-                  {p.team ? ` · ${p.team}` : ''}
-                  {p.ecr != null ? ` · ECR ${p.ecr}` : ''}
-                </span>
-                <span className="trade-suggest__val">{ecrToTradeValue(p.ecr).toFixed(1)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {search.trim() && suggestions.length === 0 && (
-        <p className="muted trade-suggest-empty">No matches.</p>
-      )}
 
       <ul className="trade-players">
         {players.length === 0 && <li className="muted trade-players__empty">No players yet.</li>}
@@ -187,11 +195,9 @@ export default function TradeAnalyzer() {
   const [sideB, setSideB] = useState([]);
   const [managerA, setManagerA] = useState(NONE);
   const [managerB, setManagerB] = useState(NONE);
-  const [searchA, setSearchA] = useState('');
-  const [searchB, setSearchB] = useState('');
-  const [packageAdjust, setPackageAdjust] = useState(true);
   const [finderFocal, setFinderFocal] = useState(NONE);
   const [finderRan, setFinderRan] = useState(false);
+  const [hype, setHype] = useState({ status: 'idle' });
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +214,29 @@ export default function TradeAnalyzer() {
       .catch((err) => {
         if (!cancelled) {
           setRankings({ status: 'error', message: err.message || 'Failed to load rankings' });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!SHOW_TRADE_HYPE) return undefined;
+    let cancelled = false;
+    setHype({ status: 'loading' });
+    fetch('/api/trade-hype', { credentials: 'include' })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+        return data;
+      })
+      .then((data) => {
+        if (!cancelled) setHype({ status: 'ready', data });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setHype({ status: 'error', message: err.message || 'Failed to load hype' });
         }
       });
     return () => {
@@ -297,55 +326,22 @@ export default function TradeAnalyzer() {
     return s;
   }, [sideA, sideB]);
 
-  const suggestA = useMemo(() => {
-    const q = searchA.trim().toLowerCase();
-    if (!q || sideA.length >= MAX_PER_SIDE) return [];
-    const poolOwnerId = managerB || NONE;
-    let pool = players;
-    if (poolOwnerId && rosterCtx.status === 'ready') {
-      const ids = rosterCtx.byOwner.get(poolOwnerId);
-      pool = ids?.size
-        ? players.filter((p) => p.sleeper_id && ids.has(String(p.sleeper_id)))
-        : [];
-    }
-    const out = [];
-    for (const p of pool) {
-      if (!p?.name) continue;
-      if (selectedKeys.has(playerKey(p))) continue;
-      const hay = `${p.name} ${p.team || ''} ${p.pos || ''}`.toLowerCase();
-      if (!hay.includes(q)) continue;
-      out.push(p);
-      if (out.length >= 8) break;
-    }
-    return out;
-  }, [searchA, managerB, sideA.length, players, selectedKeys, rosterCtx]);
+  /** Side A receives from Team B's roster; Side B receives from Team A's. */
+  const optionsA = useMemo(() => {
+    if (!managerB) return [];
+    const roster = rostersByOwner.get(managerB) || [];
+    return roster.filter((p) => !selectedKeys.has(playerKey(p)));
+  }, [managerB, rostersByOwner, selectedKeys]);
 
-  const suggestB = useMemo(() => {
-    const q = searchB.trim().toLowerCase();
-    if (!q || sideB.length >= MAX_PER_SIDE) return [];
-    const poolOwnerId = managerA || NONE;
-    let pool = players;
-    if (poolOwnerId && rosterCtx.status === 'ready') {
-      const ids = rosterCtx.byOwner.get(poolOwnerId);
-      pool = ids?.size
-        ? players.filter((p) => p.sleeper_id && ids.has(String(p.sleeper_id)))
-        : [];
-    }
-    const out = [];
-    for (const p of pool) {
-      if (!p?.name) continue;
-      if (selectedKeys.has(playerKey(p))) continue;
-      const hay = `${p.name} ${p.team || ''} ${p.pos || ''}`.toLowerCase();
-      if (!hay.includes(q)) continue;
-      out.push(p);
-      if (out.length >= 8) break;
-    }
-    return out;
-  }, [searchB, managerA, sideB.length, players, selectedKeys, rosterCtx]);
+  const optionsB = useMemo(() => {
+    if (!managerA) return [];
+    const roster = rostersByOwner.get(managerA) || [];
+    return roster.filter((p) => !selectedKeys.has(playerKey(p)));
+  }, [managerA, rostersByOwner, selectedKeys]);
 
   const analysis = useMemo(
-    () => analyzeTrade(sideA, sideB, { packageAdjust }),
-    [sideA, sideB, packageAdjust],
+    () => analyzeTrade(sideA, sideB, { packageAdjust: true }),
+    [sideA, sideB],
   );
 
   const rosterImpact = useMemo(() => {
@@ -368,18 +364,31 @@ export default function TradeAnalyzer() {
       focalOwnerId: finderFocal,
       rostersByOwner,
       managers,
-      opts: { packageAdjust },
+      opts: { packageAdjust: true },
     });
-  }, [finderRan, finderFocal, rostersByOwner, managers, packageAdjust]);
+  }, [finderRan, finderFocal, rostersByOwner, managers]);
 
-  function addToSide(setter, setSearch, player) {
+  const tradePlayersTagged = useMemo(() => {
+    const out = [];
+    for (const p of sideA) out.push({ ...p, _side: 'a' });
+    for (const p of sideB) out.push({ ...p, _side: 'b' });
+    return out;
+  }, [sideA, sideB]);
+
+  const hypeMatch = useMemo(() => {
+    if (hype.status !== 'ready' || tradePlayersTagged.length === 0) {
+      return { items: [], newsCount: 0, trendCount: 0 };
+    }
+    return matchTradeHype(tradePlayersTagged, hype.data);
+  }, [hype, tradePlayersTagged]);
+
+  function addToSide(setter, player) {
     setter((prev) => {
       if (prev.length >= MAX_PER_SIDE) return prev;
       const key = playerKey(player);
       if (prev.some((p) => playerKey(p) === key)) return prev;
       return [...prev, toTradePlayer(player)];
     });
-    setSearch('');
   }
 
   function removeFromSide(setter, key) {
@@ -389,8 +398,6 @@ export default function TradeAnalyzer() {
   function clearAll() {
     setSideA([]);
     setSideB([]);
-    setSearchA('');
-    setSearchB('');
   }
 
   function loadSuggestion(s) {
@@ -398,8 +405,6 @@ export default function TradeAnalyzer() {
     setManagerB(s.partnerId);
     setSideA(s.sideAGets.map(toTradePlayer));
     setSideB(s.sideBGets.map(toTradePlayer));
-    setSearchA('');
-    setSearchB('');
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -426,10 +431,6 @@ export default function TradeAnalyzer() {
       <header className="page-header">
         <p className="eyebrow">Half-PPR · redraft</p>
         <h1>Trade analyzer</h1>
-        <p className="muted">
-          ECR value plus starter-upgrade scoring for your league. Finder suggests deals that help
-          both sides.
-        </p>
         {rankings.status === 'ready' && rankings.data.scrape_date && (
           <p className="trade-source">
             ECR as of <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
@@ -439,6 +440,54 @@ export default function TradeAnalyzer() {
           </p>
         )}
       </header>
+
+      <details className="trade-help">
+        <summary className="trade-help__summary">
+          <span className="trade-help__icon" aria-hidden="true">
+            ?
+          </span>
+          <span className="trade-help__label">How it calculates</span>
+          <span className="trade-help__hint">Simple explainer</span>
+          <svg
+            className="trade-help__chevron"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </summary>
+        <div className="trade-help__body">
+          <ol className="trade-help__steps">
+            <li>
+              <strong>Player value</strong> — each player gets points from their Half-PPR expert rank
+              (ECR). Better ranks = more points. Top guys are worth much more than depth pieces.
+            </li>
+            <li>
+              <strong>Fair deal?</strong> — we add up both sides. If the totals are close, it&apos;s
+              Fair; a bit off is a Slight edge; way off is Lopsided. Uneven player counts get a small
+              boost on the thinner side.
+            </li>
+            <li>
+              <strong>Starter upgrade</strong> — we rebuild each team&apos;s best lineup (QB, RBs,
+              WRs, TE, FLEX, DST) before and after the trade. Green means your starters got better.
+            </li>
+            <li>
+              <strong>Trade finder</strong> — scans simple swaps across the league and keeps deals
+              that look fair on value <em>and</em> help at least one starting lineup.
+            </li>
+          </ol>
+          <p className="muted trade-help__note">
+            This is a guide, trade at your own risk...
+          </p>
+        </div>
+      </details>
 
       {loading && (
         <div className="card-grid">
@@ -546,18 +595,96 @@ export default function TradeAnalyzer() {
             )}
           </div>
 
-          <div className="trade-toolbar card">
-            <label className="trade-toggle">
-              <input
-                type="checkbox"
-                checked={packageAdjust}
-                onChange={(e) => setPackageAdjust(e.target.checked)}
-              />
-              <span>
-                Package adjust
-                <span className="dim"> — boost the side giving fewer players</span>
-              </span>
-            </label>
+          {SHOW_TRADE_HYPE && (sideA.length > 0 || sideB.length > 0) && (
+            <section className="trade-hype card" aria-labelledby="trade-hype-title">
+              <header className="trade-hype__head">
+                <h2 id="trade-hype-title" className="trade-hype__title">
+                  Any Hype?
+                </h2>
+                <p className="muted trade-hype__sub">
+                  ESPN headlines + Sleeper waiver buzz (adds/drops, last 24h) for players in this
+                  deal.
+                </p>
+              </header>
+
+              {hype.status === 'loading' || hype.status === 'idle' ? (
+                <p className="muted">Loading news &amp; trends…</p>
+              ) : null}
+              {hype.status === 'error' && (
+                <p className="muted" role="alert">
+                  Could not load hype: {hype.message}
+                </p>
+              )}
+              {hype.status === 'ready' && hypeMatch.items.length === 0 && (
+                <p className="muted">
+                  No matching ESPN headlines or Sleeper trending hits for these players right now.
+                </p>
+              )}
+              {hype.status === 'ready' && hypeMatch.items.length > 0 && (
+                <ul className="trade-hype__list">
+                  {hypeMatch.items.map((it) => {
+                    const addLabel = formatTrendLabel(it.trending_add, 'add');
+                    const dropLabel = formatTrendLabel(it.trending_drop, 'drop');
+                    const sideLabel =
+                      it.side === 'a' ? `${labelA} gets` : it.side === 'b' ? `${labelB} gets` : null;
+                    return (
+                      <li key={`${it.sleeper_id || it.name}-${it.side}`} className="trade-hype__player">
+                        <div className="trade-hype__player-head">
+                          <div>
+                            <strong className="trade-hype__name">{it.name}</strong>
+                            <span className="trade-hype__meta">
+                              {[it.pos, it.team, sideLabel].filter(Boolean).join(' · ')}
+                            </span>
+                          </div>
+                          <div className="trade-hype__badges">
+                            {addLabel && (
+                              <span className="trade-hype__badge trade-hype__badge--add" title={addLabel}>
+                                Hot add #{it.trending_add.rank}
+                              </span>
+                            )}
+                            {dropLabel && (
+                              <span
+                                className="trade-hype__badge trade-hype__badge--drop"
+                                title={dropLabel}
+                              >
+                                Hot drop #{it.trending_drop.rank}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {(addLabel || dropLabel) && (
+                          <ul className="trade-hype__trends">
+                            {addLabel && <li>{addLabel}</li>}
+                            {dropLabel && <li>{dropLabel}</li>}
+                          </ul>
+                        )}
+                        {it.news.length > 0 && (
+                          <ul className="trade-hype__news">
+                            {it.news.map((n) => (
+                              <li key={n.id}>
+                                {n.link ? (
+                                  <a href={n.link} target="_blank" rel="noopener noreferrer">
+                                    {n.headline}
+                                  </a>
+                                ) : (
+                                  <span>{n.headline}</span>
+                                )}
+                                {formatHoursAgo(n.hours_ago) && (
+                                  <span className="trade-hype__when">{formatHoursAgo(n.hours_ago)}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
+
+          <div className="trade-toolbar">
             <button type="button" className="btn btn-ghost" onClick={clearAll}>
               Clear players
             </button>
@@ -572,15 +699,13 @@ export default function TradeAnalyzer() {
               bonus={analysis.bonusA}
               poolLabel={
                 managerB
-                  ? `Searching ${labelById.get(managerB) || 'partner'}'s roster`
-                  : 'Searching all ranked players — pick Team B to limit to their roster'
+                  ? `From ${labelById.get(managerB) || 'partner'}'s roster`
+                  : 'Pick Team B to choose from their roster'
               }
-              search={searchA}
-              onSearchChange={setSearchA}
-              suggestions={suggestA}
-              onAdd={(p) => addToSide(setSideA, setSearchA, p)}
+              options={optionsA}
+              onAdd={(p) => addToSide(setSideA, p)}
               onRemove={(key) => removeFromSide(setSideA, key)}
-              disabled={loading}
+              disabled={loading || !managerB}
             />
             <SidePanel
               title={`${labelB} gets`}
@@ -590,15 +715,13 @@ export default function TradeAnalyzer() {
               bonus={analysis.bonusB}
               poolLabel={
                 managerA
-                  ? `Searching ${labelById.get(managerA) || 'you'}'s roster`
-                  : 'Searching all ranked players — pick Team A to limit to their roster'
+                  ? `From ${labelById.get(managerA) || 'you'}'s roster`
+                  : 'Pick Team A to choose from their roster'
               }
-              search={searchB}
-              onSearchChange={setSearchB}
-              suggestions={suggestB}
-              onAdd={(p) => addToSide(setSideB, setSearchB, p)}
+              options={optionsB}
+              onAdd={(p) => addToSide(setSideB, p)}
               onRemove={(key) => removeFromSide(setSideB, key)}
-              disabled={loading}
+              disabled={loading || !managerA}
             />
           </div>
 

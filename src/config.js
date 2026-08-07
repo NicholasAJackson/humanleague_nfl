@@ -4,6 +4,9 @@ export const DEFAULT_KEEPERS_REVEAL_AT = '2026-08-01T12:00:00Z';
 /** Rule suggestions / votes / discussion close at this instant by default (same as keeper reveal). */
 export const DEFAULT_RULES_CHANGES_CLOSE_AT = DEFAULT_KEEPERS_REVEAL_AT;
 
+/** League startup draft — 8 Aug 2026, 7:00pm BST. Override with `VITE_DRAFT_AT`. */
+export const DEFAULT_DRAFT_AT = '2026-08-08T19:00:00+01:00';
+
 export const config = {
   leagueId: import.meta.env.VITE_SLEEPER_LEAGUE_ID || '',
   /** ISO 8601, e.g. `2026-08-20T17:00:00-04:00`. Uses {@link DEFAULT_KEEPERS_REVEAL_AT} when env unset. */
@@ -12,6 +15,8 @@ export const config = {
   rulesChangesCloseAt: (
     import.meta.env.VITE_RULES_CHANGES_CLOSE_AT || DEFAULT_RULES_CHANGES_CLOSE_AT
   ).trim(),
+  /** Startup draft kickoff (default: 8 Aug 2026, 7pm BST). Override with `VITE_DRAFT_AT`. */
+  draftAt: (import.meta.env.VITE_DRAFT_AT || DEFAULT_DRAFT_AT).trim(),
 };
 
 /** Human League roster/draft shape — used for keeper cost vs consensus view on Rankings. */
@@ -31,8 +36,31 @@ export function canAccessMockDraft(user, devBypass) {
   return false;
 }
 
-/** Keeper ceremony: commissioners only (testers cannot lock finals). */
+/** Flip these when reopening pages to the league. */
+export const SHOW_KEEPERS_PAGE = false;
+export const SHOW_CEREMONY_PAGE = false;
+export const SHOW_RULES_PAGE = false;
+
+/** Keepers page — gated while offseason tooling is paused. */
+export function canAccessKeepers() {
+  return SHOW_KEEPERS_PAGE;
+}
+
+/** Keeper ceremony: commissioners only when the page is enabled. */
 export function canAccessKeeperCeremony(user, devBypass) {
+  if (!SHOW_CEREMONY_PAGE) return false;
+  if (user?.role === 'commissioner') return true;
+  if (import.meta.env.DEV && devBypass) return true;
+  return false;
+}
+
+/** Rules page — gated while offseason tooling is paused. */
+export function canAccessRules() {
+  return SHOW_RULES_PAGE;
+}
+
+/** Trade analyzer: commissioners only for now (flip when opening to managers). */
+export function canAccessTradeAnalyzer(user, devBypass) {
   if (user?.role === 'commissioner') return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
@@ -40,6 +68,13 @@ export function canAccessKeeperCeremony(user, devBypass) {
 
 export function isConfigured() {
   return Boolean(config.leagueId);
+}
+
+/** Milliseconds at draft kickoff, or null if unset / invalid. */
+export function getDraftTimestamp() {
+  if (!config.draftAt) return null;
+  const t = Date.parse(config.draftAt);
+  return Number.isFinite(t) ? t : null;
 }
 
 /** Milliseconds at which keeper nominations become visible in the UI, or null if not configured / invalid. */
