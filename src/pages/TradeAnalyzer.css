@@ -194,7 +194,7 @@
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: var(--space-3);
-  align-items: end;
+  align-items: start;
   margin-top: var(--space-4);
 }
 
@@ -230,7 +230,15 @@
   color: var(--color-text-mute);
   font-size: var(--fs-sm);
   font-weight: 600;
-  padding-bottom: 4px;
+  padding-top: 1.4em;
+}
+
+.trade-verdict__players {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-dim);
+  line-height: 1.35;
+  font-weight: 500;
 }
 
 .trade-upgrade {
@@ -282,20 +290,13 @@
 }
 
 .trade-upgrade__grid .is-up strong,
-.trade-upgrade__mutual .is-up,
 .trade-finder__meta .is-up {
   color: var(--color-success);
 }
 
 .trade-upgrade__grid .is-down strong,
-.trade-upgrade__mutual .is-down,
 .trade-finder__meta .is-down {
   color: var(--color-danger);
-}
-
-.trade-upgrade__mutual {
-  margin: var(--space-3) 0 0;
-  font-size: var(--fs-sm);
 }
 
 .trade-upgrade-hint {
@@ -303,30 +304,32 @@
   font-size: var(--fs-sm);
 }
 
-.trade-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-}
-
-.trade-toggle {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
+.trade-bridge {
+  margin: 0;
   font-size: var(--fs-sm);
-  cursor: pointer;
-  max-width: 28rem;
+  text-align: center;
 }
 
-.trade-toggle input {
-  margin-top: 3px;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--color-accent);
-  flex-shrink: 0;
+.trade-bridge__clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.trade-bridge__clear:hover {
+  color: var(--color-accent-strong);
+}
+
+.trade-verdict__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3);
 }
 
 .trade-sides {
@@ -380,12 +383,6 @@
 .trade-side__total strong {
   font-size: var(--fs-xl);
   line-height: 1;
-}
-
-.trade-side__bonus {
-  font-size: var(--fs-xs);
-  color: var(--color-accent);
-  font-weight: 600;
 }
 
 .trade-side__pool {

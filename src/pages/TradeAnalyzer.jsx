@@ -93,7 +93,6 @@ function SidePanel({
   sideKey,
   players,
   total,
-  bonus,
   poolLabel,
   options,
   onAdd,
@@ -112,7 +111,6 @@ function SidePanel({
         <div className="trade-side__total" aria-live="polite">
           <span className="trade-side__total-label">Value</span>
           <strong>{total.toFixed(1)}</strong>
-          {bonus > 0 ? <span className="trade-side__bonus">+{bonus.toFixed(1)} pkg</span> : null}
         </div>
       </header>
 
@@ -538,62 +536,121 @@ export default function TradeAnalyzer() {
             </div>
           )}
 
-          <div className={`trade-verdict trade-verdict--${fair.band}`} role="status">
-            <div className="trade-verdict__label">{fair.label}</div>
-            <p className="trade-verdict__summary">{fair.summary}</p>
-            {(sideA.length > 0 || sideB.length > 0) && (
+          {managers.length > 0 && (
+            <p className="muted trade-bridge">
+              {managerA && managerB
+                ? 'Add players from each roster below.'
+                : 'Pick both teams, then add players from each roster.'}
+              {(sideA.length > 0 || sideB.length > 0) && (
+                <>
+                  {' '}
+                  <button type="button" className="trade-bridge__clear" onClick={clearAll}>
+                    Clear deal
+                  </button>
+                </>
+              )}
+            </p>
+          )}
+
+          <div className="trade-sides">
+            <SidePanel
+              title={`${labelA} gets`}
+              sideKey="a"
+              players={sideA}
+              total={analysis.totalA}
+              poolLabel={
+                managerB
+                  ? `From ${labelById.get(managerB) || 'partner'}'s roster`
+                  : 'Pick Team B to choose from their roster'
+              }
+              options={optionsA}
+              onAdd={(p) => addToSide(setSideA, p)}
+              onRemove={(key) => removeFromSide(setSideA, key)}
+              disabled={loading || !managerB}
+            />
+            <SidePanel
+              title={`${labelB} gets`}
+              sideKey="b"
+              players={sideB}
+              total={analysis.totalB}
+              poolLabel={
+                managerA
+                  ? `From ${labelById.get(managerA) || 'you'}'s roster`
+                  : 'Pick Team A to choose from their roster'
+              }
+              options={optionsB}
+              onAdd={(p) => addToSide(setSideB, p)}
+              onRemove={(key) => removeFromSide(setSideB, key)}
+              disabled={loading || !managerA}
+            />
+          </div>
+
+          {(sideA.length > 0 || sideB.length > 0) && (
+            <div className={`trade-verdict trade-verdict--${fair.band}`} role="status">
+              <div className="trade-verdict__label">{fair.label}</div>
+              <p className="trade-verdict__summary">{fair.summary}</p>
               <div className="trade-verdict__scores">
                 <div className={fair.winner === 'a' ? 'is-winner' : undefined}>
                   <span>{labelA} gets</span>
                   <strong>{analysis.totalA.toFixed(1)}</strong>
+                  {sideA.length > 0 && (
+                    <p className="trade-verdict__players">
+                      {sideA.map((p) => p.name).join(', ')}
+                    </p>
+                  )}
                 </div>
                 <div className="trade-verdict__vs">vs</div>
                 <div className={fair.winner === 'b' ? 'is-winner' : undefined}>
                   <span>{labelB} gets</span>
                   <strong>{analysis.totalB.toFixed(1)}</strong>
+                  {sideB.length > 0 && (
+                    <p className="trade-verdict__players">
+                      {sideB.map((p) => p.name).join(', ')}
+                    </p>
+                  )}
                 </div>
               </div>
-            )}
 
-            {rosterImpact && (
-              <div className="trade-upgrade">
-                <div className="trade-upgrade__title">Starter upgrade (optimal ECR lineup)</div>
-                <div className="trade-upgrade__grid">
-                  <div className={upgradeClass(rosterImpact.a.upgrade)}>
-                    <span>{labelA}</span>
-                    <strong>{fmtUpgrade(rosterImpact.a.upgrade)}</strong>
-                    <em>
-                      {rosterImpact.a.beforeTotal.toFixed(1)} → {rosterImpact.a.afterTotal.toFixed(1)}
-                    </em>
-                  </div>
-                  <div className={upgradeClass(rosterImpact.b.upgrade)}>
-                    <span>{labelB}</span>
-                    <strong>{fmtUpgrade(rosterImpact.b.upgrade)}</strong>
-                    <em>
-                      {rosterImpact.b.beforeTotal.toFixed(1)} → {rosterImpact.b.afterTotal.toFixed(1)}
-                    </em>
+              {rosterImpact && (
+                <div className="trade-upgrade">
+                  <div className="trade-upgrade__title">Starter upgrade?</div>
+                  <div className="trade-upgrade__grid">
+                    <div className={upgradeClass(rosterImpact.a.upgrade)}>
+                      <span>{labelA}</span>
+                      <strong>{fmtUpgrade(rosterImpact.a.upgrade)}</strong>
+                      <em>
+                        {rosterImpact.a.beforeTotal.toFixed(1)} → {rosterImpact.a.afterTotal.toFixed(1)}
+                      </em>
+                    </div>
+                    <div className={upgradeClass(rosterImpact.b.upgrade)}>
+                      <span>{labelB}</span>
+                      <strong>{fmtUpgrade(rosterImpact.b.upgrade)}</strong>
+                      <em>
+                        {rosterImpact.b.beforeTotal.toFixed(1)} → {rosterImpact.b.afterTotal.toFixed(1)}
+                      </em>
+                    </div>
                   </div>
                 </div>
-                <p className="muted trade-upgrade__mutual">
-                  Mutual starter change:{' '}
-                  <strong className={upgradeClass(rosterImpact.mutualUpgrade)}>
-                    {fmtUpgrade(rosterImpact.mutualUpgrade)}
-                  </strong>
+              )}
+
+              {managerA && managerB && !rosterImpact && (
+                <p className="muted trade-upgrade-hint">
+                  Starter upgrades need both teams to have ranked roster players for this season.
                 </p>
-              </div>
-            )}
+              )}
+              {(!managerA || !managerB) && (
+                <p className="muted trade-upgrade-hint">
+                  Pick Team A and Team B to score starter upgrades for this league.
+                </p>
+              )}
 
-            {managerA && managerB && (sideA.length > 0 || sideB.length > 0) && !rosterImpact && (
-              <p className="muted trade-upgrade-hint">
-                Starter upgrades need both teams to have ranked roster players for this season.
-              </p>
-            )}
-            {(!managerA || !managerB) && (sideA.length > 0 || sideB.length > 0) && (
-              <p className="muted trade-upgrade-hint">
-                Pick Team A and Team B to score starter upgrades for this league.
-              </p>
-            )}
-          </div>
+              <div className="trade-verdict__actions">
+                <button type="button" className="btn btn-ghost" onClick={clearAll}>
+                  Clear players
+                </button>
+              </div>
+            </div>
+          )}
 
           {SHOW_TRADE_HYPE && (sideA.length > 0 || sideB.length > 0) && (
             <section className="trade-hype card" aria-labelledby="trade-hype-title">
@@ -684,47 +741,6 @@ export default function TradeAnalyzer() {
             </section>
           )}
 
-          <div className="trade-toolbar">
-            <button type="button" className="btn btn-ghost" onClick={clearAll}>
-              Clear players
-            </button>
-          </div>
-
-          <div className="trade-sides">
-            <SidePanel
-              title={`${labelA} gets`}
-              sideKey="a"
-              players={sideA}
-              total={analysis.totalA}
-              bonus={analysis.bonusA}
-              poolLabel={
-                managerB
-                  ? `From ${labelById.get(managerB) || 'partner'}'s roster`
-                  : 'Pick Team B to choose from their roster'
-              }
-              options={optionsA}
-              onAdd={(p) => addToSide(setSideA, p)}
-              onRemove={(key) => removeFromSide(setSideA, key)}
-              disabled={loading || !managerB}
-            />
-            <SidePanel
-              title={`${labelB} gets`}
-              sideKey="b"
-              players={sideB}
-              total={analysis.totalB}
-              bonus={analysis.bonusB}
-              poolLabel={
-                managerA
-                  ? `From ${labelById.get(managerA) || 'you'}'s roster`
-                  : 'Pick Team A to choose from their roster'
-              }
-              options={optionsB}
-              onAdd={(p) => addToSide(setSideB, p)}
-              onRemove={(key) => removeFromSide(setSideB, key)}
-              disabled={loading || !managerA}
-            />
-          </div>
-
           {managers.length > 0 && (
             <section className="trade-finder card" aria-labelledby="trade-finder-title">
               <header className="trade-finder__head">
@@ -811,11 +827,11 @@ export default function TradeAnalyzer() {
             </section>
           )}
 
-          <p className="muted trade-footnote">
+          {/* <p className="muted trade-footnote">
             Chart values decay from ECR rank 1 (100 pts). Starter upgrades rebuild each roster into
-            1 QB / 2 RB / 2 WR / 1 TE / 1 FLEX / 1 DST using ECR trade value. Unranked roster players
+            1 QB / 2 RB / 2 WR / 1 TE / 2 FLEX / 1 DST using ECR trade value. Unranked roster players
             are ignored.
-          </p>
+          </p> */}
         </>
       )}
     </div>

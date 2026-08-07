@@ -9,7 +9,7 @@ export function normalizeDraftPos(pos) {
   return p;
 }
 
-/** Starter slots for need scoring — 1 QB + flex, no kickers (Human League shape). */
+/** Starter slots for need scoring — 1 QB + 2 flex, no kickers (Human League shape). */
 export function getStarterSlots(slots = leagueFormat.starterSlots) {
   return {
     QB: Number(slots?.QB) || 1,
