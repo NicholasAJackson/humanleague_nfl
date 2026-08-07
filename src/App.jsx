@@ -13,6 +13,7 @@ const MockDraft = lazy(() => import('./pages/MockDraft.jsx'));
 const Keepers = lazy(() => import('./pages/Keepers.jsx'));
 const KeeperCeremony = lazy(() => import('./pages/KeeperCeremony.jsx'));
 const Rankings = lazy(() => import('./pages/Rankings.jsx'));
+const TradeAnalyzer = lazy(() => import('./pages/TradeAnalyzer.jsx'));
 const MyTeam = lazy(() => import('./pages/MyTeam.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 
@@ -109,6 +110,7 @@ export default function App() {
               }
             />
             <Route path="/rankings" element={<Rankings />} />
+            <Route path="/trades" element={<TradeAnalyzer />} />
             <Route path="/me" element={<MyTeam />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
