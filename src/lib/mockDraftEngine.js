@@ -1,4 +1,16 @@
 import { leagueFormat } from '../config.js';
+import {
+  normalizeDraftPos,
+  rosterStarterNeeds,
+  positionFillsStarterNeed,
+} from './rosterNeeds.js';
+
+export {
+  normalizeDraftPos,
+  getStarterSlots,
+  rosterStarterNeeds,
+  positionFillsStarterNeed,
+} from './rosterNeeds.js';
 
 /** Fisher–Yates shuffle; optional `rng` for tests (`() => 0..1`). */
 export function shuffleDraftSlots(userIds, rng = Math.random) {
@@ -81,69 +93,6 @@ export function remainingPicksPerUser(users, nominationByUserId, targetRosterSiz
     m.set(uid, Math.max(0, targetRosterSize - kept));
   }
   return m;
-}
-
-export function normalizeDraftPos(pos) {
-  const p = String(pos || '')
-    .trim()
-    .toUpperCase();
-  if (p === 'DEF') return 'DST';
-  return p;
-}
-
-/** Starter slots for need scoring — 1 QB + flex, no kickers (Human League shape). */
-export function getStarterSlots(slots = leagueFormat.starterSlots) {
-  return {
-    QB: Number(slots?.QB) || 1,
-    RB: Number(slots?.RB) || 2,
-    WR: Number(slots?.WR) || 2,
-    TE: Number(slots?.TE) || 1,
-    FLEX: Number(slots?.FLEX) || 1,
-    DST: Number(slots?.DST) || 1,
-  };
-}
-
-/**
- * How many starter holes remain for each position (FLEX absorbs RB/WR/TE overflow).
- * @returns {{ QB: number, RB: number, WR: number, TE: number, FLEX: number, DST: number, counts: Record<string, number> }}
- */
-export function rosterStarterNeeds(rosterPlayers, starterSlots = leagueFormat.starterSlots) {
-  const slots = getStarterSlots(starterSlots);
-  const counts = { QB: 0, RB: 0, WR: 0, TE: 0, DST: 0 };
-  for (const p of rosterPlayers || []) {
-    const pos = normalizeDraftPos(p.pos || p.position);
-    if (counts[pos] != null) counts[pos] += 1;
-  }
-
-  const qbNeed = Math.max(0, slots.QB - counts.QB);
-  const dstNeed = Math.max(0, slots.DST - counts.DST);
-  const rbOverflow = Math.max(0, counts.RB - slots.RB);
-  const wrOverflow = Math.max(0, counts.WR - slots.WR);
-  const teOverflow = Math.max(0, counts.TE - slots.TE);
-  const flexFilled = Math.min(slots.FLEX, rbOverflow + wrOverflow + teOverflow);
-  const flexNeed = Math.max(0, slots.FLEX - flexFilled);
-
-  return {
-    QB: qbNeed,
-    RB: Math.max(0, slots.RB - counts.RB),
-    WR: Math.max(0, slots.WR - counts.WR),
-    TE: Math.max(0, slots.TE - counts.TE),
-    FLEX: flexNeed,
-    DST: dstNeed,
-    counts,
-  };
-}
-
-/** True if drafting this position still fills a starter (dedicated or FLEX). */
-export function positionFillsStarterNeed(pos, needs) {
-  const p = normalizeDraftPos(pos);
-  if (!needs) return false;
-  if (p === 'QB') return (needs.QB || 0) > 0;
-  if (p === 'DST') return (needs.DST || 0) > 0;
-  if (p === 'RB') return (needs.RB || 0) > 0 || (needs.FLEX || 0) > 0;
-  if (p === 'WR') return (needs.WR || 0) > 0 || (needs.FLEX || 0) > 0;
-  if (p === 'TE') return (needs.TE || 0) > 0 || (needs.FLEX || 0) > 0;
-  return false;
 }
 
 /**

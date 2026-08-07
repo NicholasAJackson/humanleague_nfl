@@ -2,7 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Nav from './components/Nav.jsx';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
-import { canAccessMockDraft, canAccessKeeperCeremony } from './config.js';
+import { canAccessMockDraft, canAccessKeeperCeremony, canAccessTradeAnalyzer, canAccessKeepers, canAccessRules } from './config.js';
 
 const Home = lazy(() => import('./pages/Home.jsx'));
 const Stats = lazy(() => import('./pages/Stats.jsx'));
@@ -13,6 +13,7 @@ const MockDraft = lazy(() => import('./pages/MockDraft.jsx'));
 const Keepers = lazy(() => import('./pages/Keepers.jsx'));
 const KeeperCeremony = lazy(() => import('./pages/KeeperCeremony.jsx'));
 const Rankings = lazy(() => import('./pages/Rankings.jsx'));
+const TradeAnalyzer = lazy(() => import('./pages/TradeAnalyzer.jsx'));
 const MyTeam = lazy(() => import('./pages/MyTeam.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 
@@ -70,6 +71,27 @@ function CeremonyOnly({ children }) {
   return children;
 }
 
+function TradeAnalyzerOnly({ children }) {
+  const { ready, user, devBypass } = useAuth();
+  if (!ready) return <PageFallback />;
+  if (!canAccessTradeAnalyzer(user, devBypass)) return <Navigate to="/" replace />;
+  return children;
+}
+
+function KeepersOnly({ children }) {
+  const { ready } = useAuth();
+  if (!ready) return <PageFallback />;
+  if (!canAccessKeepers()) return <Navigate to="/" replace />;
+  return children;
+}
+
+function RulesOnly({ children }) {
+  const { ready } = useAuth();
+  if (!ready) return <PageFallback />;
+  if (!canAccessRules()) return <Navigate to="/" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -89,7 +111,14 @@ export default function App() {
             <Route path="/insights" element={<Navigate to="/stats" replace />} />
             <Route path="/h2h" element={<Navigate to="/stats" replace />} />
             <Route path="/wheel" element={<Wheel />} />
-            <Route path="/rules" element={<Rules />} />
+            <Route
+              path="/rules"
+              element={
+                <RulesOnly>
+                  <Rules />
+                </RulesOnly>
+              }
+            />
             <Route path="/drafts" element={<Drafts />} />
             <Route
               path="/mock-draft"
@@ -99,7 +128,14 @@ export default function App() {
                 </MockDraftOnly>
               }
             />
-            <Route path="/keepers" element={<Keepers />} />
+            <Route
+              path="/keepers"
+              element={
+                <KeepersOnly>
+                  <Keepers />
+                </KeepersOnly>
+              }
+            />
             <Route
               path="/keeper-ceremony"
               element={
@@ -109,6 +145,14 @@ export default function App() {
               }
             />
             <Route path="/rankings" element={<Rankings />} />
+            <Route
+              path="/trades"
+              element={
+                <TradeAnalyzerOnly>
+                  <TradeAnalyzer />
+                </TradeAnalyzerOnly>
+              }
+            />
             <Route path="/me" element={<MyTeam />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

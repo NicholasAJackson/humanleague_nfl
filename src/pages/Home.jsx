@@ -1,10 +1,73 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { config } from '../config.js';
+import { config, canAccessKeepers, canAccessRules, getDraftTimestamp } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
 import { fetchLeague, fetchUsers } from '../lib/sleeper.js';
 import { fetchHallOfFame } from '../lib/hallOfFame.js';
 import './Home.css';
+
+function splitCountdown(msRemaining) {
+  const totalSec = Math.max(0, Math.floor(msRemaining / 1000));
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  return { days, hours, minutes, seconds, done: totalSec <= 0 };
+}
+
+function DraftCountdown() {
+  const draftTs = getDraftTimestamp();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (draftTs == null) return undefined;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [draftTs]);
+
+  if (draftTs == null) return null;
+
+  const parts = splitCountdown(draftTs - now);
+  const draftLabel = new Date(draftTs).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+
+  if (parts.done) {
+    return (
+      <div className="home-countdown" role="status">
+        <p className="home-countdown__label">Draft time</p>
+        <p className="home-countdown__live">It&apos;s draft night — good luck.</p>
+      </div>
+    );
+  }
+
+  const cells = [
+    { value: parts.days, label: parts.days === 1 ? 'day' : 'days' },
+    { value: parts.hours, label: 'hrs' },
+    { value: parts.minutes, label: 'min' },
+    { value: parts.seconds, label: 'sec' },
+  ];
+
+  return (
+    <div className="home-countdown" role="timer" aria-live="polite" aria-atomic="true">
+      <p className="home-countdown__label">Draft countdown</p>
+      <div className="home-countdown__grid">
+        {cells.map((c) => (
+          <div key={c.label} className="home-countdown__cell">
+            <strong>{String(c.value).padStart(2, '0')}</strong>
+            <span>{c.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="home-countdown__when">{draftLabel}</p>
+    </div>
+  );
+}
 
 export default function Home() {
   const { ready, authenticated, authEnabled, user, devBypass } = useAuth();
@@ -76,10 +139,9 @@ export default function Home() {
         <div className="home-hero__inner">
           <h1 className="home-hero__title">{league?.name || 'Your league'}</h1>
           <p className="home-hero__intro">
-            <span className="home-hero__intro-lead">So it begins...</span>
-            The 2026 season is approaching, time to pick your keepers for next
-            season and discuss rule changes.
+            <span className="home-hero__intro-lead">Keepers are locked, the draft is next...</span>
           </p>
+          <DraftCountdown />
           {showMyTeamCta && (
             <Link to="/me" className="home-hero__my-team">
               Welcome back{welcomeTeamName ? `, ${welcomeTeamName}` : ''}
@@ -107,18 +169,22 @@ export default function Home() {
       )}
 
       <div className="home-features">
-        <FeatureLink
-          to="/keepers"
-          icon={KeeperIcon}
-          title="Keeper Selection"
-          body="Lock in your keepers for the upcoming season."
-        />
-        <FeatureLink
-          to="/rules"
-          icon={RulesIcon}
-          title="Rule Changes"
-          body="Suggest a rule and vote on what should change next season."
-        />
+        {canAccessKeepers() && (
+          <FeatureLink
+            to="/keepers"
+            icon={KeeperIcon}
+            title="Keeper Selection"
+            body="Lock in your keepers for the upcoming season."
+          />
+        )}
+        {canAccessRules() && (
+          <FeatureLink
+            to="/rules"
+            icon={RulesIcon}
+            title="Rule Changes"
+            body="Suggest a rule and vote on what should change next season."
+          />
+        )}
         <FeatureLink
           to="/stats"
           icon={StatsIcon}

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
-import { canAccessMockDraft, canAccessKeeperCeremony } from '../config.js';
+import { canAccessMockDraft, canAccessKeeperCeremony, canAccessTradeAnalyzer, canAccessKeepers, canAccessRules } from '../config.js';
 import BottomSheet from './BottomSheet.jsx';
 import './Nav.css';
 
@@ -14,15 +14,19 @@ const primaryItems = [
 
 const overflowItems = [
   { to: '/stats', label: 'Stats', icon: StatsIcon },
+  { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
-  { to: '/keepers', label: 'Keepers', icon: KeeperIcon },
+  { to: '/keepers', label: 'Keepers', icon: KeeperIcon, requires: 'keepers' },
   { to: '/keeper-ceremony', label: 'Ceremony', icon: CeremonyIcon, requires: 'ceremony' },
-  { to: '/rules', label: 'Rules', icon: RulesIcon },
+  { to: '/rules', label: 'Rules', icon: RulesIcon, requires: 'rules' },
 ];
 
 function itemVisible(item, user, devBypass) {
   if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass);
   if (item.requires === 'ceremony') return canAccessKeeperCeremony(user, devBypass);
+  if (item.requires === 'trades') return canAccessTradeAnalyzer(user, devBypass);
+  if (item.requires === 'keepers') return canAccessKeepers();
+  if (item.requires === 'rules') return canAccessRules();
   return true;
 }
 
@@ -213,6 +217,17 @@ function RankingsIcon() {
       <path d="M10 20V4" />
       <path d="M16 20v-7" />
       <path d="M22 20H2" />
+    </svg>
+  );
+}
+
+function TradeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 3h5v5" />
+      <path d="M8 21H3v-5" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
     </svg>
   );
 }

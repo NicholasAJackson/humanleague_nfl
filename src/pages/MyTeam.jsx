@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { config, leagueFormat } from '../config.js';
+import { config, leagueFormat, canAccessKeepers } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
 import BottomSheet from '../components/BottomSheet.jsx';
 import {
@@ -807,9 +807,11 @@ export default function MyTeam() {
             </div>
           </>
         )}
-        <p style={{ marginTop: 14 }}>
-          <Link to="/keepers">Edit on Keepers page →</Link>
-        </p>
+        {canAccessKeepers() ? (
+          <p style={{ marginTop: 14 }}>
+            <Link to="/keepers">Edit on Keepers page →</Link>
+          </p>
+        ) : null}
       </section>
     </div>
   );
