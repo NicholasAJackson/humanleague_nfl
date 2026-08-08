@@ -128,7 +128,7 @@ export async function resolvePreviousLeagueId(currentLeagueId) {
 
 /**
  * Walks Sleeper’s previous_league_id chain starting from the **configured**
- * league (current season, e.g. 2025), then each older linked season (2024…).
+ * league (current season, e.g. 2026), then each older linked season (2025…).
  * Order: newest first.
  */
 export async function resolveLeagueHistoryChain(currentLeagueId) {

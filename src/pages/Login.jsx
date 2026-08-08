@@ -212,7 +212,7 @@ export default function Login() {
               onChange={(e) => setGuestId(e.target.value)}
               disabled={submitting || guestSubmitting}
               required
-              placeholder="e.g. 1245387983213821952"
+              placeholder="e.g. 1389346393180639232"
             />
             <p className="login-hint">
               Find it in the Sleeper URL when you open the league (
