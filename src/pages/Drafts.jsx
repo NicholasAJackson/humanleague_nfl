@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { config } from '../config.js';
+import { useLeague } from '../LeagueContext.jsx';
 import {
   loadDraftHistoryChain,
   fetchSeasonDraftBoard,
@@ -20,6 +20,7 @@ function draftPosTintClass(posRaw) {
 }
 
 export default function Drafts() {
+  const { leagueId: rootLeagueId } = useLeague();
   const [chain, setChain] = useState(null);
   const [seasonIndex, setSeasonIndex] = useState(0);
   const [board, setBoard] = useState(null);
@@ -28,17 +29,19 @@ export default function Drafts() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!config.leagueId) {
+    if (!rootLeagueId) {
       setChain([]);
       setLoadingChain(false);
       return;
     }
     let cancelled = false;
+    setLoadingChain(true);
     (async () => {
       try {
-        const c = await loadDraftHistoryChain(config.leagueId);
+        const c = await loadDraftHistoryChain(rootLeagueId);
         if (!cancelled) {
           setChain(c);
+          setSeasonIndex(0);
           setError(null);
         }
       } catch (e) {
@@ -53,7 +56,7 @@ export default function Drafts() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rootLeagueId]);
 
   const leagueId = chain?.[seasonIndex]?.leagueId;
 
@@ -95,7 +98,7 @@ export default function Drafts() {
     };
   }, [grid]);
 
-  if (!config.leagueId) {
+  if (!rootLeagueId) {
     return (
       <div className="page">
         <p className="muted">Set VITE_SLEEPER_LEAGUE_ID to view drafts.</p>

@@ -9,6 +9,23 @@
   padding-bottom: var(--safe-bottom);
 }
 
+.nav-guest-banner {
+  margin: 0;
+  padding: 6px max(var(--space-3), var(--safe-left)) 0 max(var(--space-3), var(--safe-right));
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--color-text-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-guest-banner strong {
+  color: var(--color-text);
+  font-weight: 650;
+}
+
 .bottom-nav ul {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

@@ -43,6 +43,54 @@ export function shuffleDraftSlotsWithFixed(userIds, fixedUserId, fixedSlotIndex,
   return out;
 }
 
+/** Official league draft order (Sleeper display_name, round-1 pick 1 → 10). */
+export const FIXED_MOCK_DRAFT_ORDER_DISPLAY_NAMES = [
+  'EaglesWrexham',
+  'DanTheDallasFan',
+  'LennyLemon',
+  'NanananaNutman',
+  'JackLeeman',
+  'DavieRocket',
+  'GeorgiaJackson',
+  'ScufDaddy1',
+  'CarlNeverLose',
+  'NicholasJackson7',
+];
+
+/**
+ * Resolve Sleeper user_ids in `orderedNames` order (case-insensitive display_name).
+ * Appends any unmatched league users at the end so the board still fills.
+ */
+export function resolveSlotOrderFromDisplayNames(
+  users,
+  orderedNames = FIXED_MOCK_DRAFT_ORDER_DISPLAY_NAMES,
+) {
+  const list = Array.isArray(users) ? users : [];
+  const byName = new Map();
+  for (const u of list) {
+    const name = String(u?.display_name || '').trim().toLowerCase();
+    const id = u?.user_id != null ? String(u.user_id) : '';
+    if (name && id && !byName.has(name)) byName.set(name, id);
+  }
+  const seen = new Set();
+  const out = [];
+  for (const raw of orderedNames || []) {
+    const id = byName.get(String(raw || '').trim().toLowerCase());
+    if (id && !seen.has(id)) {
+      out.push(id);
+      seen.add(id);
+    }
+  }
+  for (const u of list) {
+    const id = u?.user_id != null ? String(u.user_id) : '';
+    if (id && !seen.has(id)) {
+      out.push(id);
+      seen.add(id);
+    }
+  }
+  return out;
+}
+
 /** Round 1 = slot index order 0..n-1; round 2 = reverse; snake thereafter. */
 export function snakeRoundUserIds(slotOrderUserIds, roundNumber) {
   const n = slotOrderUserIds.length;

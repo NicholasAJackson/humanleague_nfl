@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { config } from '../config.js';
+import { useLeague } from '../LeagueContext.jsx';
 import { fetchLeagueHistoryBundles } from '../lib/sleeper.js';
 import { computeStats, computeCareerByUser } from '../lib/stats.js';
 import {
@@ -24,18 +24,19 @@ const SECTION_VISIBILITY = {
 };
 
 export default function Stats() {
+  const { leagueId } = useLeague();
   const [state, setState] = useState({ status: 'loading' });
   const [managerA, setManagerA] = useState('');
   const [managerB, setManagerB] = useState('');
 
   async function load({ force = false } = {}) {
     setState({ status: 'loading' });
-    if (!config.leagueId) {
+    if (!leagueId) {
       setState({ status: 'no-config' });
       return;
     }
     try {
-      const entries = await fetchLeagueHistoryBundles(config.leagueId, { force });
+      const entries = await fetchLeagueHistoryBundles(leagueId, { force });
       if (!entries.length) {
         setState({ status: 'no-data' });
         return;
@@ -79,7 +80,7 @@ export default function Stats() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [leagueId]);
 
   const userOptions = useMemo(() => {
     if (state.status !== 'ready') return [];

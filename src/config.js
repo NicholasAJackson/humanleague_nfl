@@ -19,6 +19,31 @@ export const config = {
   draftAt: (import.meta.env.VITE_DRAFT_AT || DEFAULT_DRAFT_AT).trim(),
 };
 
+function envFlagTrue(name) {
+  const v = import.meta.env[name];
+  if (typeof v !== 'string') return false;
+  const s = v.trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
+
+/**
+ * Local-only: keep `/login` reachable so you can paste a Sleeper league ID for guest browse,
+ * even when site auth is off (dev bypass). Set `VITE_DEV_LOGIN_SCREEN=1` in `.env.local`.
+ * Ignored in production builds.
+ */
+export const DEV_LOGIN_SCREEN = Boolean(import.meta.env.DEV && envFlagTrue('VITE_DEV_LOGIN_SCREEN'));
+
+/**
+ * Guest “browse another league” is commissioner tooling (plus local DEV).
+ * Managers never see browse UI; anonymous public login stays sign-in only.
+ */
+export function canAccessGuestBrowse(user, devBypass, { hasRealSession } = {}) {
+  if (user?.role === 'commissioner') return true;
+  if (import.meta.env.DEV && DEV_LOGIN_SCREEN && !hasRealSession) return true;
+  if (import.meta.env.DEV && devBypass) return true;
+  return false;
+}
+
 /** Human League roster/draft shape — used for keeper cost vs consensus view on Rankings. */
 export const leagueFormat = {
   teamCount: 10,
@@ -29,8 +54,19 @@ export const leagueFormat = {
   starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 2, DST: 1 },
 };
 
-/** Mock draft: any signed-in member; local dev allows session bypass (see AuthContext). */
-export function canAccessMockDraft(user, devBypass) {
+/**
+ * Guest “browse another league” may use these Sleeper-read routes only.
+ * Keepers, rules, My Team, mock draft, and ceremony stay on the auth path.
+ */
+export const GUEST_ALLOWED_PATHS = new Set(['/', '/stats', '/drafts', '/rankings', '/trades']);
+
+export function isGuestAllowedPath(pathname) {
+  return GUEST_ALLOWED_PATHS.has(pathname);
+}
+
+/** Mock draft: any signed-in member; local dev allows session bypass (see AuthContext). Guests: no. */
+export function canAccessMockDraft(user, devBypass, isGuest = false) {
+  if (isGuest) return false;
   if (user) return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
@@ -41,33 +77,46 @@ export const SHOW_KEEPERS_PAGE = false;
 export const SHOW_CEREMONY_PAGE = false;
 export const SHOW_RULES_PAGE = false;
 
-/** Keepers page — gated while offseason tooling is paused. */
-export function canAccessKeepers() {
+/** Keepers page — gated while offseason tooling is paused. Guests: no. */
+export function canAccessKeepers(isGuest = false) {
+  if (isGuest) return false;
   return SHOW_KEEPERS_PAGE;
 }
 
-/** Keeper ceremony: commissioners only when the page is enabled. */
-export function canAccessKeeperCeremony(user, devBypass) {
+/** Keeper ceremony: commissioners only when the page is enabled. Guests: no. */
+export function canAccessKeeperCeremony(user, devBypass, isGuest = false) {
+  if (isGuest) return false;
   if (!SHOW_CEREMONY_PAGE) return false;
   if (user?.role === 'commissioner') return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
 }
 
-/** Rules page — gated while offseason tooling is paused. */
-export function canAccessRules() {
+/** Rules page — gated while offseason tooling is paused. Guests: no. */
+export function canAccessRules(isGuest = false) {
+  if (isGuest) return false;
   return SHOW_RULES_PAGE;
 }
 
-/** Trade analyzer: commissioners + testers for now (flip when opening to managers). */
-export function canAccessTradeAnalyzer(user, devBypass) {
+/**
+ * Trade analyzer: commissioners + testers for Human League;
+ * any guest browse session (Sleeper-read) may use it.
+ */
+export function canAccessTradeAnalyzer(user, devBypass, isGuest = false) {
+  if (isGuest) return true;
   if (user?.role === 'commissioner' || user?.role === 'tester') return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
 }
 
-export function isConfigured() {
-  return Boolean(config.leagueId);
+/** My Team requires a member session bound to a Sleeper user — never guests. */
+export function canAccessMyTeam(user, isGuest = false) {
+  if (isGuest) return false;
+  return typeof user?.sleeperUserId === 'string' && user.sleeperUserId.length > 0;
+}
+
+export function isConfigured(leagueId = config.leagueId) {
+  return Boolean(leagueId);
 }
 
 /** Milliseconds at draft kickoff, or null if unset / invalid. */

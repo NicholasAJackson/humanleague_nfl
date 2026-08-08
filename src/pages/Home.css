@@ -45,6 +45,14 @@ body:has(.home-page) {
   background-position: center, center 20%;
 }
 
+/* Guest browse: no Human League championship photo. */
+.home-page--guest .home-hero {
+  min-height: calc(42svh - var(--nav-height));
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(56, 189, 248, 0.18), transparent 70%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.2), var(--color-bg));
+}
+
 .home-hero__inner {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { config, isConfigured } from '../config.js';
+import { isConfigured } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
+import { useLeague } from '../LeagueContext.jsx';
 import {
   resolveLeagueHistoryChain,
   fetchSeasonBundle,
@@ -187,6 +188,7 @@ function upgradeClass(n) {
 
 export default function TradeAnalyzer() {
   const { user } = useAuth();
+  const { leagueId } = useLeague();
   const [rankings, setRankings] = useState({ status: 'idle' });
   const [rosterCtx, setRosterCtx] = useState({ status: 'idle' });
   const [sideA, setSideA] = useState([]);
@@ -243,13 +245,13 @@ export default function TradeAnalyzer() {
   }, []);
 
   useEffect(() => {
-    if (!isConfigured()) {
+    if (!isConfigured(leagueId)) {
       setRosterCtx({ status: 'ready', season: null, users: [], byOwner: new Map() });
       return;
     }
     let cancelled = false;
     setRosterCtx({ status: 'loading' });
-    loadRosterContext(config.leagueId)
+    loadRosterContext(leagueId)
       .then((ctx) => {
         if (!cancelled) setRosterCtx({ status: 'ready', ...ctx });
       })
@@ -267,7 +269,7 @@ export default function TradeAnalyzer() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [leagueId]);
 
   const players = rankings.status === 'ready' ? rankings.data.players || [] : [];
   const managers = useMemo(

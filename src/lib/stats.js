@@ -600,7 +600,12 @@ export function computeCareerByUser(seasonStats) {
         worstWeek: u.worstWeek,
       };
     })
-    .sort((a, b) => b.careerPf - a.careerPf);
+    .sort(
+      (a, b) =>
+        b.wins - a.wins ||
+        a.losses - b.losses ||
+        b.careerPf - a.careerPf
+    );
 
   return { rows, seasons, latestChampionUserId };
 }

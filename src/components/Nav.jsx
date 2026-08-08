@@ -1,18 +1,26 @@
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
-import { canAccessMockDraft, canAccessKeeperCeremony, canAccessTradeAnalyzer, canAccessKeepers, canAccessRules } from '../config.js';
+import { useLeague } from '../LeagueContext.jsx';
+import {
+  canAccessMockDraft,
+  canAccessKeeperCeremony,
+  canAccessTradeAnalyzer,
+  canAccessKeepers,
+  canAccessRules,
+  canAccessGuestBrowse,
+} from '../config.js';
 import BottomSheet from './BottomSheet.jsx';
 import './Nav.css';
 
-const primaryItems = [
+const memberPrimaryItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
   { to: '/me', label: 'My team', icon: MyTeamIcon },
   { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
   { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, requires: 'mockDraft' },
 ];
 
-const overflowItems = [
+const memberOverflowItems = [
   { to: '/stats', label: 'Stats', icon: StatsIcon },
   { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
@@ -21,31 +29,47 @@ const overflowItems = [
   { to: '/rules', label: 'Rules', icon: RulesIcon, requires: 'rules' },
 ];
 
-function itemVisible(item, user, devBypass) {
-  if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass);
-  if (item.requires === 'ceremony') return canAccessKeeperCeremony(user, devBypass);
-  if (item.requires === 'trades') return canAccessTradeAnalyzer(user, devBypass);
-  if (item.requires === 'keepers') return canAccessKeepers();
-  if (item.requires === 'rules') return canAccessRules();
+const guestPrimaryItems = [
+  { to: '/', label: 'Home', icon: HomeIcon, end: true },
+  { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
+  { to: '/stats', label: 'Stats', icon: StatsIcon },
+  { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
+];
+
+const guestOverflowItems = [{ to: '/drafts', label: 'Draft', icon: DraftIcon }];
+
+function itemVisible(item, user, devBypass, isGuest) {
+  if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass, isGuest);
+  if (item.requires === 'ceremony') return canAccessKeeperCeremony(user, devBypass, isGuest);
+  if (item.requires === 'trades') return canAccessTradeAnalyzer(user, devBypass, isGuest);
+  if (item.requires === 'keepers') return canAccessKeepers(isGuest);
+  if (item.requires === 'rules') return canAccessRules(isGuest);
   return true;
 }
 
 export default function Nav() {
   const { authEnabled, authenticated, devBypass, refresh, user } = useAuth();
+  const { isGuest, exitGuestLeague, guestLeagueName } = useLeague();
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
-  const showLogout = authEnabled && authenticated && !devBypass;
+  const hasRealSession = authenticated && !devBypass;
+  const showLogout = authEnabled && hasRealSession && !isGuest;
+  const showExitGuest = isGuest;
+  const showBrowse =
+    !isGuest &&
+    location.pathname !== '/login' &&
+    canAccessGuestBrowse(user, devBypass, { hasRealSession: Boolean(hasRealSession) });
 
-  const primaryVisible = useMemo(
-    () => primaryItems.filter((item) => itemVisible(item, user, devBypass)),
-    [user, devBypass],
-  );
+  const primaryVisible = useMemo(() => {
+    const items = isGuest ? guestPrimaryItems : memberPrimaryItems;
+    return items.filter((item) => itemVisible(item, user, devBypass, isGuest));
+  }, [user, devBypass, isGuest]);
 
-  const overflowVisible = useMemo(
-    () => overflowItems.filter((item) => itemVisible(item, user, devBypass)),
-    [user, devBypass],
-  );
+  const overflowVisible = useMemo(() => {
+    const items = isGuest ? guestOverflowItems : memberOverflowItems;
+    return items.filter((item) => itemVisible(item, user, devBypass, isGuest));
+  }, [user, devBypass, isGuest]);
 
   const overflowPaths = useMemo(() => new Set(overflowVisible.map((i) => i.to)), [overflowVisible]);
 
@@ -55,13 +79,27 @@ export default function Nav() {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } finally {
+      // Stale guest browse storage would make Login treat us as still "in" and bounce to /.
+      exitGuestLeague();
       await refresh();
       navigate('/login', { replace: true });
     }
   }
 
+  function onExitGuest() {
+    exitGuestLeague();
+    navigate(hasRealSession ? '/' : '/login', { replace: true });
+  }
+
+  const navExtra = showLogout || showExitGuest || showBrowse;
+
   return (
-    <nav className={'bottom-nav' + (showLogout ? ' bottom-nav--auth' : '')} aria-label="Primary">
+    <nav className={'bottom-nav' + (navExtra ? ' bottom-nav--auth' : '')} aria-label="Primary">
+      {isGuest && guestLeagueName ? (
+        <p className="nav-guest-banner" title={guestLeagueName}>
+          Browsing <strong>{guestLeagueName}</strong>
+        </p>
+      ) : null}
       <ul>
         {primaryVisible.map(({ to, label, icon: Icon, end }) => (
           <li key={to}>
@@ -75,20 +113,22 @@ export default function Nav() {
             </NavLink>
           </li>
         ))}
-        <li>
-          <button
-            type="button"
-            className={'tab tab-more' + (moreActive ? ' active' : '')}
-            aria-expanded={moreOpen}
-            aria-haspopup="dialog"
-            aria-controls="nav-more-sheet"
-            aria-label="More navigation"
-            onClick={() => setMoreOpen(true)}
-          >
-            <MoreIcon />
-            <span>More</span>
-          </button>
-        </li>
+        {overflowVisible.length > 0 && (
+          <li>
+            <button
+              type="button"
+              className={'tab tab-more' + (moreActive ? ' active' : '')}
+              aria-expanded={moreOpen}
+              aria-haspopup="dialog"
+              aria-controls="nav-more-sheet"
+              aria-label="More navigation"
+              onClick={() => setMoreOpen(true)}
+            >
+              <MoreIcon />
+              <span>More</span>
+            </button>
+          </li>
+        )}
         {showLogout && (
           <li>
             <button type="button" className="tab tab-logout" onClick={onLogout}>
@@ -97,13 +137,28 @@ export default function Nav() {
             </button>
           </li>
         )}
+        {showExitGuest && (
+          <li>
+            <button type="button" className="tab tab-logout" onClick={onExitGuest}>
+              <LogoutIcon />
+              <span>Exit</span>
+            </button>
+          </li>
+        )}
+        {showBrowse && (
+          <li>
+            <NavLink
+              to="/login"
+              className={({ isActive }) => 'tab' + (isActive ? ' active' : '')}
+            >
+              <BrowseIcon />
+              <span>Browse</span>
+            </NavLink>
+          </li>
+        )}
       </ul>
 
-      <BottomSheet
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        title="More"
-      >
+      <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
         <div id="nav-more-sheet">
           <ul className="nav-more-list">
             {overflowVisible.map(({ to, label, icon: Icon }) => (
@@ -131,6 +186,15 @@ function LogoutIcon() {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function BrowseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
     </svg>
   );
 }

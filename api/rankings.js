@@ -1,5 +1,5 @@
 import { send } from './_db.js';
-import { assertSiteAuth } from './_auth.js';
+// Public: rankings are third-party consensus/ADP (not league-private). Guest browse mode needs this.
 
 const ECR_URL = 'https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_fpecr_latest.csv';
 const IDS_URL = 'https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv';
@@ -529,8 +529,6 @@ async function getSleeperAdpRankings() {
 
 export default async function handler(req, res) {
   try {
-    if (!assertSiteAuth(req, res, send)) return;
-
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
       return send(res, 405, { error: 'Method not allowed' });

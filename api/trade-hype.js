@@ -1,5 +1,5 @@
 import { send } from './_db.js';
-import { assertSiteAuth } from './_auth.js';
+// Public: ESPN/Sleeper trend proxies (not league-private). Guest browse mode needs this.
 
 const ESPN_NEWS_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50';
 const SLEEPER_TREND_ADD = 'https://api.sleeper.app/v1/players/nfl/trending/add?lookback_hours=24&limit=50';
@@ -130,8 +130,6 @@ async function getHypePayload() {
 
 export default async function handler(req, res) {
   try {
-    if (!assertSiteAuth(req, res, send)) return;
-
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
       return send(res, 405, { error: 'Method not allowed' });

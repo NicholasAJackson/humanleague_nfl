@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { config, canAccessKeepers, canAccessRules, getDraftTimestamp } from '../config.js';
+import { canAccessKeepers, canAccessRules, getDraftTimestamp } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
+import { useLeague } from '../LeagueContext.jsx';
 import { fetchLeague, fetchUsers } from '../lib/sleeper.js';
 import { fetchHallOfFame } from '../lib/hallOfFame.js';
 import './Home.css';
@@ -71,13 +72,15 @@ function DraftCountdown() {
 
 export default function Home() {
   const { ready, authenticated, authEnabled, user, devBypass } = useAuth();
+  const { leagueId, isGuest, isHumanLeague, guestLeagueName } = useLeague();
   const [welcomeTeamName, setWelcomeTeamName] = useState(null);
   const [league, setLeague] = useState(null);
   const [hof, setHof] = useState({ status: 'idle' });
 
   const showMyTeamCta =
     ready &&
-    Boolean(config.leagueId) &&
+    !isGuest &&
+    Boolean(leagueId) &&
     authEnabled &&
     authenticated &&
     !devBypass &&
@@ -85,12 +88,12 @@ export default function Home() {
     user.sleeperUserId.length > 0;
 
   useEffect(() => {
-    if (!showMyTeamCta || !config.leagueId) {
+    if (!showMyTeamCta || !leagueId) {
       setWelcomeTeamName(null);
       return;
     }
     let cancelled = false;
-    fetchUsers(config.leagueId)
+    fetchUsers(leagueId)
       .then((users) => {
         const u = Array.isArray(users) ? users.find((x) => x.user_id === user.sleeperUserId) : null;
         const label = u?.metadata?.team_name || u?.display_name || null;
@@ -102,12 +105,12 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [showMyTeamCta, user?.sleeperUserId]);
+  }, [showMyTeamCta, user?.sleeperUserId, leagueId]);
 
   useEffect(() => {
-    if (!config.leagueId) return;
+    if (!leagueId) return;
     let cancelled = false;
-    fetchLeague(config.leagueId)
+    fetchLeague(leagueId)
       .then((l) => {
         if (!cancelled) setLeague(l);
       })
@@ -115,13 +118,13 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [leagueId]);
 
   useEffect(() => {
-    if (!config.leagueId) return;
+    if (!leagueId) return;
     let cancelled = false;
     setHof({ status: 'loading' });
-    fetchHallOfFame(config.leagueId)
+    fetchHallOfFame(leagueId)
       .then((rows) => {
         if (!cancelled) setHof({ status: 'ready', rows });
       })
@@ -131,17 +134,25 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [leagueId]);
+
+  const title = league?.name || guestLeagueName || 'Your league';
 
   return (
-    <div className="page home-page">
+    <div className={'page home-page' + (isGuest ? ' home-page--guest' : '')}>
       <section className="home-hero" aria-label="League home">
         <div className="home-hero__inner">
-          <h1 className="home-hero__title">{league?.name || 'Your league'}</h1>
+          <h1 className="home-hero__title">{title}</h1>
           <p className="home-hero__intro">
-            <span className="home-hero__intro-lead">Keepers are locked, the draft is next...</span>
+            {isHumanLeague ? (
+              <span className="home-hero__intro-lead">Keepers are locked, the draft is next...</span>
+            ) : (
+              <span className="home-hero__intro-lead">
+                Browsing this Sleeper league — stats, drafts, rankings, and trades.
+              </span>
+            )}
           </p>
-          <DraftCountdown />
+          {isHumanLeague ? <DraftCountdown /> : null}
           {showMyTeamCta && (
             <Link to="/me" className="home-hero__my-team">
               Welcome back{welcomeTeamName ? `, ${welcomeTeamName}` : ''}
@@ -150,17 +161,17 @@ export default function Home() {
         </div>
       </section>
 
-      {!config.leagueId && <NoConfig />}
-      {config.leagueId && hof.status === 'loading' && (
+      {!leagueId && <NoConfig />}
+      {leagueId && hof.status === 'loading' && (
         <div className="card" aria-busy="true">
           <div className="skeleton" style={{ height: 20, width: '35%', marginBottom: 12 }} />
           <div className="skeleton" style={{ height: 56, width: '100%' }} />
         </div>
       )}
-      {config.leagueId && hof.status === 'ready' && hof.rows?.length > 0 && (
+      {leagueId && hof.status === 'ready' && hof.rows?.length > 0 && (
         <HallOfFame rows={hof.rows} />
       )}
-      {config.leagueId && hof.status === 'error' && (
+      {leagueId && hof.status === 'error' && (
         <div className="card">
           <p className="muted" style={{ margin: 0 }}>
             Could not load Hall of Fame: {hof.message}
@@ -169,7 +180,7 @@ export default function Home() {
       )}
 
       <div className="home-features">
-        {canAccessKeepers() && (
+        {canAccessKeepers(isGuest) && (
           <FeatureLink
             to="/keepers"
             icon={KeeperIcon}
@@ -177,7 +188,7 @@ export default function Home() {
             body="Lock in your keepers for the upcoming season."
           />
         )}
-        {canAccessRules() && (
+        {canAccessRules(isGuest) && (
           <FeatureLink
             to="/rules"
             icon={RulesIcon}
@@ -191,6 +202,28 @@ export default function Home() {
           title="League Stats"
           body="Standings, all-time totals and head-to-head."
         />
+        {isGuest && (
+          <>
+            <FeatureLink
+              to="/drafts"
+              icon={DraftIcon}
+              title="Draft history"
+              body="Past startup drafts for this league."
+            />
+            <FeatureLink
+              to="/rankings"
+              icon={RankingsIcon}
+              title="Rankings"
+              body="ADP and consensus lists for trade and draft prep."
+            />
+            <FeatureLink
+              to="/trades"
+              icon={TradeIcon}
+              title="Trade analyzer"
+              body="Compare sides using rankings and current rosters."
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -407,6 +440,68 @@ function StatsIcon() {
     >
       <path d="M3 3v18h18" />
       <path d="M7 15l4-4 3 3 5-6" />
+    </svg>
+  );
+}
+
+function DraftIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <path d="M8 7h8M8 11h8M8 15h4" />
+    </svg>
+  );
+}
+
+function RankingsIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 20V10" />
+      <path d="M10 20V4" />
+      <path d="M16 20v-7" />
+      <path d="M22 20H2" />
+    </svg>
+  );
+}
+
+function TradeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M16 3h5v5" />
+      <path d="M8 21H3v-5" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
     </svg>
   );
 }

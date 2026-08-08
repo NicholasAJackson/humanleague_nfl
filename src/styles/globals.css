@@ -144,10 +144,18 @@ p { margin: 0 0 var(--space-3); line-height: 1.5; }
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + var(--space-4));
 }
 
+.app-shell--guest {
+  padding-bottom: calc(var(--nav-height) + 28px + var(--safe-bottom) + var(--space-4));
+}
+
 @media (min-width: 768px) {
   .app-shell {
     padding-bottom: var(--space-6);
     padding-top: var(--space-4);
+  }
+
+  .app-shell--guest {
+    padding-bottom: var(--space-6);
   }
 }
 

@@ -4,7 +4,7 @@ import { areKeeperNominationsHiddenInUi, config, leagueFormat } from '../config.
 import { buildDevMockKeeperNominations } from '../lib/devMockKeeperNominations.js';
 import { findLatestSeasonWithSnakePicks, buildDraftSlotByPlayerId } from '../lib/drafts.js';
 import {
-  shuffleDraftSlotsWithFixed,
+  resolveSlotOrderFromDisplayNames,
   simulateSnakeDraft,
   buildPickQueue,
   draftPickRecord,
@@ -381,8 +381,6 @@ export default function MockDraft() {
   const [keeperCostDraft, setKeeperCostDraft] = useState({ status: 'idle' });
 
   const [myTeamUserId, setMyTeamUserId] = useState('');
-  /** 0-based round-1 pick slot; '' until chosen. */
-  const [myPickSlot, setMyPickSlot] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
   const [playerSearchOpen, setPlayerSearchOpen] = useState(false);
   const playerSearchInputRef = useRef(null);
@@ -783,10 +781,10 @@ export default function MockDraft() {
 
   const applyDraftOrder = useCallback(() => {
     if (timedDraftActive) return;
-    if (!myTeamUserId || myPickSlot === '') return;
-    const ids = sortedUsers.map((u) => u.user_id).filter(Boolean);
-    if (!ids.includes(myTeamUserId)) return;
-    setSlotOrderUserIds(shuffleDraftSlotsWithFixed(ids, myTeamUserId, Number(myPickSlot)));
+    if (!sortedUsers.length) return;
+    const order = resolveSlotOrderFromDisplayNames(sortedUsers);
+    if (!order.length) return;
+    setSlotOrderUserIds(order);
     setDraftPicks([]);
     setPickQueue([]);
     setPickCursor(0);
@@ -794,13 +792,20 @@ export default function MockDraft() {
     setDraftPoolExhausted(false);
     teamBoardsRef.current = null;
     setTeamBoards(null);
-  }, [sortedUsers, timedDraftActive, myTeamUserId, myPickSlot]);
+  }, [sortedUsers, timedDraftActive]);
 
   useEffect(() => {
     if (timedDraftActive || draftRoomOpen) return;
-    if (!myTeamUserId || myPickSlot === '') return;
+    if (!sortedUsers.length) return;
     applyDraftOrder();
-  }, [myTeamUserId, myPickSlot, applyDraftOrder, timedDraftActive, draftRoomOpen]);
+  }, [sortedUsers, applyDraftOrder, timedDraftActive, draftRoomOpen]);
+
+  /** 0-based round-1 pick from fixed league order; '' until team + order are known. */
+  const myPickSlot = useMemo(() => {
+    if (!myTeamUserId || !slotOrderUserIds?.length) return '';
+    const idx = slotOrderUserIds.indexOf(myTeamUserId);
+    return idx >= 0 ? idx : '';
+  }, [myTeamUserId, slotOrderUserIds]);
 
   const ensureTeamBoards = useCallback(() => {
     if (!slotOrderUserIds?.length || rankingBoards.length === 0) return null;
@@ -1429,39 +1434,30 @@ export default function MockDraft() {
                       ))}
                     </select>
                   </label>
-                  <label className="mock-draft-control mock-draft-control--inline">
+                  <div className="mock-draft-control mock-draft-control--inline">
                     <span className="mock-draft-control__label">Your pick</span>
-                    <select
-                      value={myPickSlot === '' ? '' : String(myPickSlot)}
-                      disabled={!myTeamUserId || timedDraftActive}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setMyPickSlot(v === '' ? '' : Number(v));
-                      }}
-                    >
-                      <option value="">Pick #…</option>
-                      {sortedUsers.map((_, i) => {
-                        const n = i + 1;
-                        const mod100 = n % 100;
-                        const suffix =
-                          mod100 >= 11 && mod100 <= 13
-                            ? 'th'
-                            : n % 10 === 1
-                              ? 'st'
-                              : n % 10 === 2
-                                ? 'nd'
-                                : n % 10 === 3
-                                  ? 'rd'
-                                  : 'th';
-                        return (
-                          <option key={i} value={i}>
-                            {n}
-                            {suffix} overall
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </label>
+                    <p className="mock-draft-control__value muted">
+                      {myPickSlot === ''
+                        ? myTeamUserId
+                          ? '—'
+                          : 'Select a team'
+                        : (() => {
+                            const n = myPickSlot + 1;
+                            const mod100 = n % 100;
+                            const suffix =
+                              mod100 >= 11 && mod100 <= 13
+                                ? 'th'
+                                : n % 10 === 1
+                                  ? 'st'
+                                  : n % 10 === 2
+                                    ? 'nd'
+                                    : n % 10 === 3
+                                      ? 'rd'
+                                      : 'th';
+                            return `${n}${suffix} overall`;
+                          })()}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="mock-draft-controls">
@@ -1481,14 +1477,6 @@ export default function MockDraft() {
                   </label>
 
                   <div className="mock-draft-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={applyDraftOrder}
-                      disabled={timedDraftActive || !myTeamUserId || myPickSlot === ''}
-                    >
-                      {slotOrderUserIds?.length ? 'Reshuffle others' : 'Set draft order'}
-                    </button>
                     <button type="button" className="btn btn-secondary" onClick={resetDraftOnly} disabled={timedDraftActive}>
                       Clear board
                     </button>

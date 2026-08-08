@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { config, leagueFormat } from '../config.js';
+import { leagueFormat } from '../config.js';
+import { useLeague } from '../LeagueContext.jsx';
 import { resolveLeagueHistoryChain, fetchRosters, fetchUsers } from '../lib/sleeper.js';
 import {
   findLatestSeasonWithSnakePicks,
@@ -183,6 +184,7 @@ function SortTh({ sortKey, sortState, onSort, alignEnd, title, className, childr
 }
 
 export default function Rankings() {
+  const { leagueId } = useLeague();
   const [view, setView] = useState('sleeper-adp');
   const [position, setPosition] = useState('ALL');
   const [managerFilter, setManagerFilter] = useState('ALL');
@@ -216,7 +218,7 @@ export default function Rankings() {
 
   useEffect(() => {
     if (view !== 'keeper') return;
-    if (!config.leagueId) {
+    if (!leagueId) {
       setKeeper({ status: 'no-league' });
       return;
     }
@@ -230,7 +232,7 @@ export default function Rankings() {
 
     (async () => {
       try {
-        const chain = await resolveLeagueHistoryChain(config.leagueId);
+        const chain = await resolveLeagueHistoryChain(leagueId);
         const hit = await findLatestSeasonWithSnakePicks(chain);
         if (cancelled) return;
         if (!hit) {
@@ -279,7 +281,7 @@ export default function Rankings() {
     return () => {
       cancelled = true;
     };
-  }, [view, ecr.status, ecr.data, config.leagueId]);
+  }, [view, ecr.status, ecr.data, leagueId]);
 
   useEffect(() => {
     setManagerFilter('ALL');
