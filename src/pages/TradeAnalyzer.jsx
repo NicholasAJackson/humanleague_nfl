@@ -196,6 +196,7 @@ export default function TradeAnalyzer() {
   const [managerA, setManagerA] = useState(NONE);
   const [managerB, setManagerB] = useState(NONE);
   const [finderFocal, setFinderFocal] = useState(NONE);
+  const [finderPos, setFinderPos] = useState(NONE);
   const [finderRan, setFinderRan] = useState(false);
   const [hype, setHype] = useState({ status: 'idle' });
 
@@ -364,9 +365,12 @@ export default function TradeAnalyzer() {
       focalOwnerId: finderFocal,
       rostersByOwner,
       managers,
-      opts: { packageAdjust: true },
+      opts: {
+        packageAdjust: true,
+        wantPos: finderPos || null,
+      },
     });
-  }, [finderRan, finderFocal, rostersByOwner, managers]);
+  }, [finderRan, finderFocal, finderPos, rostersByOwner, managers]);
 
   const tradePlayersTagged = useMemo(() => {
     const out = [];
@@ -752,7 +756,7 @@ export default function TradeAnalyzer() {
                   </h2>
                   <p className="muted trade-finder__sub">
                     Scans 1-for-1 and simple 2-for-1 packages for fair ECR deals that improve
-                    starters.
+                    starters. Optionally filter for a position you want to receive.
                   </p>
                 </div>
               </header>
@@ -775,6 +779,23 @@ export default function TradeAnalyzer() {
                     ))}
                   </select>
                 </label>
+                <label className="trade-control">
+                  <span className="trade-control__label">Looking for</span>
+                  <select
+                    value={finderPos}
+                    onChange={(e) => {
+                      setFinderPos(e.target.value);
+                      setFinderRan(false);
+                    }}
+                  >
+                    <option value={NONE}>Any position</option>
+                    {['QB', 'RB', 'WR', 'TE', 'DST'].map((pos) => (
+                      <option key={pos} value={pos}>
+                        {pos}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -786,7 +807,11 @@ export default function TradeAnalyzer() {
               </div>
 
               {finderRan && suggestions.length === 0 && (
-                <p className="muted">No mutual upgrades that stay within a slight ECR edge.</p>
+                <p className="muted">
+                  {finderPos
+                    ? `No fair ${finderPos} deals that improve starters within a slight ECR edge.`
+                    : 'No mutual upgrades that stay within a slight ECR edge.'}
+                </p>
               )}
 
               {suggestions.length > 0 && (

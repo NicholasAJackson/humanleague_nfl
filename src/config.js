@@ -64,15 +64,17 @@ export function isGuestAllowedPath(pathname) {
   return GUEST_ALLOWED_PATHS.has(pathname);
 }
 
-/** Mock draft: any signed-in member; local dev allows session bypass (see AuthContext). Guests: no. */
+/** Mock draft: gated off after startup draft. Flip {@link SHOW_MOCK_DRAFT_PAGE} to reopen. Guests: no. */
 export function canAccessMockDraft(user, devBypass, isGuest = false) {
   if (isGuest) return false;
+  if (!SHOW_MOCK_DRAFT_PAGE) return false;
   if (user) return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
 }
 
 /** Flip these when reopening pages to the league. */
+export const SHOW_MOCK_DRAFT_PAGE = false;
 export const SHOW_KEEPERS_PAGE = false;
 export const SHOW_CEREMONY_PAGE = false;
 export const SHOW_RULES_PAGE = false;
@@ -99,12 +101,11 @@ export function canAccessRules(isGuest = false) {
 }
 
 /**
- * Trade analyzer: commissioners + testers for Human League;
- * any guest browse session (Sleeper-read) may use it.
+ * Trade analyzer: any signed-in member; guests in browse mode; local DEV bypass.
  */
 export function canAccessTradeAnalyzer(user, devBypass, isGuest = false) {
   if (isGuest) return true;
-  if (user?.role === 'commissioner' || user?.role === 'tester') return true;
+  if (user) return true;
   if (import.meta.env.DEV && devBypass) return true;
   return false;
 }

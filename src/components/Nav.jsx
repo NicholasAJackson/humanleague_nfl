@@ -17,13 +17,13 @@ const memberPrimaryItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
   { to: '/me', label: 'My team', icon: MyTeamIcon },
   { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
-  { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, requires: 'mockDraft' },
+  { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
 ];
 
 const memberOverflowItems = [
   { to: '/stats', label: 'Stats', icon: StatsIcon },
-  { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
+  { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, requires: 'mockDraft' },
   { to: '/keepers', label: 'Keepers', icon: KeeperIcon, requires: 'keepers' },
   { to: '/keeper-ceremony', label: 'Ceremony', icon: CeremonyIcon, requires: 'ceremony' },
   { to: '/rules', label: 'Rules', icon: RulesIcon, requires: 'rules' },

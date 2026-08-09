@@ -17,6 +17,11 @@ const DEFAULTS = {
   /** At least one side should gain this much starter value. */
   minBestUpgrade: 0.5,
   packageAdjust: true,
+  /**
+   * When set (QB/RB/WR/TE/DST), only suggest deals where you receive
+   * at least one player at that position.
+   */
+  wantPos: null,
 };
 
 function bandRank(band) {
@@ -33,6 +38,12 @@ function sortAssets(players) {
   return [...(players || [])]
     .filter((p) => p && playerId(p) && Number.isFinite(Number(p.ecr)))
     .sort((a, b) => Number(a.ecr) - Number(b.ecr));
+}
+
+function assetsAtPos(players, pos) {
+  const want = normalizeDraftPos(pos);
+  if (!want) return sortAssets(players);
+  return sortAssets(players).filter((p) => normalizeDraftPos(p.pos) === want);
 }
 
 function comboPairs(list, size) {
@@ -116,6 +127,7 @@ export function findTradeSuggestions({ focalOwnerId, rostersByOwner, managers, o
   const focal = String(focalOwnerId || '');
   if (!focal || !rostersByOwner?.get(focal)?.length) return [];
 
+  const wantPos = conf.wantPos ? normalizeDraftPos(conf.wantPos) : null;
   const rosterA = rostersByOwner.get(focal);
   const labelById = new Map((managers || []).map((m) => [String(m.id), m.label]));
   const results = [];
@@ -125,7 +137,11 @@ export function findTradeSuggestions({ focalOwnerId, rostersByOwner, managers, o
     if (partnerId === focal || !rosterB?.length) continue;
     const partnerLabel = labelById.get(partnerId) || partnerId;
     const sendPool = sortAssets(rosterA).slice(0, conf.topAssets);
-    const recvPool = sortAssets(rosterB).slice(0, conf.topAssets);
+    const recvPool = (wantPos ? assetsAtPos(rosterB, wantPos) : sortAssets(rosterB)).slice(
+      0,
+      conf.topAssets,
+    );
+    if (!sendPool.length || !recvPool.length) continue;
 
     const packages = [
       ...comboPairs(sendPool, 1).flatMap((send) =>
@@ -140,6 +156,13 @@ export function findTradeSuggestions({ focalOwnerId, rostersByOwner, managers, o
     ];
 
     for (const pkg of packages) {
+      if (
+        wantPos &&
+        !pkg.sideAGets.some((p) => normalizeDraftPos(p.pos) === wantPos)
+      ) {
+        continue;
+      }
+
       const key = [
         partnerId,
         ...pkg.sideBGets.map(playerId).sort(),
@@ -150,14 +173,17 @@ export function findTradeSuggestions({ focalOwnerId, rostersByOwner, managers, o
       seen.add(key);
 
       // Soft positional fit: prefer receiving into a need / sending from surplus.
-      const needsA = rosterStarterNeeds(rosterA);
-      const surplusA = new Set(surplusPositionLabels(needsA));
-      const recvHelps = pkg.sideAGets.some((p) => positionFillsStarterNeed(p.pos, needsA));
-      const sendFromSurplus = pkg.sideBGets.some((p) =>
-        surplusA.has(normalizeDraftPos(p.pos)),
-      );
-      if (!recvHelps && !sendFromSurplus && pkg.sideAGets.length + pkg.sideBGets.length > 2) {
-        continue;
+      // Skip this gate when the user asked for a specific receive position.
+      if (!wantPos) {
+        const needsA = rosterStarterNeeds(rosterA);
+        const surplusA = new Set(surplusPositionLabels(needsA));
+        const recvHelps = pkg.sideAGets.some((p) => positionFillsStarterNeed(p.pos, needsA));
+        const sendFromSurplus = pkg.sideBGets.some((p) =>
+          surplusA.has(normalizeDraftPos(p.pos)),
+        );
+        if (!recvHelps && !sendFromSurplus && pkg.sideAGets.length + pkg.sideBGets.length > 2) {
+          continue;
+        }
       }
 
       const hit = evaluateCandidate(rosterA, rosterB, pkg.sideAGets, pkg.sideBGets, {
