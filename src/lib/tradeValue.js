@@ -1,9 +1,8 @@
 /**
- * Redraft trade values from Half-PPR ECR ranks.
+ * Trade values for the analyzer.
  *
- * Rank → points uses a gentle exponential decay so studs outpace depth pieces
- * without needing a full VORP model. Package adjust nudges the thinner side up
- * so 3-for-1 piles of bench depth don't "win" on raw totals alone.
+ * Preferred path: Sleeper Half-PPR ADP (draft market) → exponential rank decay.
+ * `player.value` may precompute that decay; otherwise `ecr` / ADP is converted on the fly.
  */
 
 export const TRADE_VALUE_DEFAULTS = {
@@ -20,7 +19,7 @@ export const TRADE_VALUE_DEFAULTS = {
 };
 
 /**
- * @param {number} ecr Overall ECR (1 = best)
+ * @param {number} ecr Overall ADP / ECR rank (1 = best)
  * @param {typeof TRADE_VALUE_DEFAULTS} [opts]
  * @returns {number}
  */
@@ -34,6 +33,18 @@ export function ecrToTradeValue(ecr, opts = {}) {
 }
 
 /**
+ * Prefer explicit decayed `value`; fall back to ADP/ECR decay.
+ * @param {{ ecr?: number|null, value?: number|null }} player
+ * @param {typeof TRADE_VALUE_DEFAULTS} [opts]
+ */
+export function playerTradeValue(player, opts = {}) {
+  if (player?.value != null && Number.isFinite(Number(player.value))) {
+    return Math.round(Number(player.value) * 10) / 10;
+  }
+  return ecrToTradeValue(player?.ecr, opts);
+}
+
+/**
  * @param {{ ecr?: number|null, value?: number|null }[]} players
  * @param {typeof TRADE_VALUE_DEFAULTS} [opts]
  */
@@ -41,11 +52,7 @@ export function sideRawTotal(players, opts = {}) {
   if (!Array.isArray(players) || players.length === 0) return 0;
   let sum = 0;
   for (const p of players) {
-    if (p?.value != null && Number.isFinite(Number(p.value))) {
-      sum += Number(p.value);
-      continue;
-    }
-    sum += ecrToTradeValue(p?.ecr, opts);
+    sum += playerTradeValue(p, opts);
   }
   return Math.round(sum * 10) / 10;
 }
@@ -117,14 +124,14 @@ export function evaluateTradeFairness(totalA, totalB, opts = {}) {
     label = 'Fair';
     summary =
       winner === 'even'
-        ? 'Both sides line up on Half-PPR ECR value.'
+        ? 'Both sides line up on Sleeper ADP value.'
         : `Close enough — ${sideName} edges it by ${gapPct}%.`;
   } else if (band === 'slight') {
     label = 'Slight edge';
-    summary = `${sideName} gets more value (~${gapPct}% gap).`;
+    summary = `${sideName} gets more ADP value (~${gapPct}% gap).`;
   } else {
     label = 'Lopsided';
-    summary = `${sideName} wins big on ECR value (~${gapPct}% gap).`;
+    summary = `${sideName} wins big on ADP value (~${gapPct}% gap).`;
   }
 
   return { gap, gapPct, winner, band, label, summary };

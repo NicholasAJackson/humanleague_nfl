@@ -7,7 +7,7 @@ import {
   fetchSeasonBundle,
   rosterPlayerIds,
 } from '../lib/sleeper.js';
-import { analyzeTrade, ecrToTradeValue } from '../lib/tradeValue.js';
+import { analyzeTrade, playerTradeValue, ecrToTradeValue, TRADE_VALUE_DEFAULTS } from '../lib/tradeValue.js';
 import {
   needHoleLabels,
   rosterStarterNeeds,
@@ -40,11 +40,16 @@ function playerKey(p) {
 }
 
 function toTradePlayer(p) {
+  const adp = Number(p.ecr);
+  const hasAdp = Number.isFinite(adp) && adp >= 1;
   return {
     name: p.name,
     pos: p.pos,
     team: p.team,
-    ecr: p.ecr,
+    /** Sleeper Half-PPR ADP (draft-market rank). */
+    ecr: hasAdp ? adp : null,
+    /** Decayed trade points from ADP rank. */
+    value: hasAdp ? ecrToTradeValue(adp) : null,
     sleeper_id: p.sleeper_id || null,
     fp_id: p.fp_id || null,
   };
@@ -138,8 +143,13 @@ function SidePanel({
           </option>
           {options.map((p) => {
             const key = playerKey(p);
-            const val = ecrToTradeValue(p.ecr).toFixed(1);
-            const meta = [p.pos, p.team, p.ecr != null ? `ECR ${p.ecr}` : null, val]
+            const val = playerTradeValue(p).toFixed(1);
+            const meta = [
+              p.pos,
+              p.team,
+              p.ecr != null ? `ADP ${Number(p.ecr).toFixed(1)}` : null,
+              val,
+            ]
               .filter(Boolean)
               .join(' · ');
             return (
@@ -160,10 +170,10 @@ function SidePanel({
               <span className="trade-player__meta">
                 {p.pos || '—'}
                 {p.team ? ` · ${p.team}` : ''}
-                {p.ecr != null ? ` · ECR ${Number(p.ecr).toFixed(1)}` : ' · unranked'}
+                {p.ecr != null ? ` · ADP ${Number(p.ecr).toFixed(1)}` : ' · no ADP'}
               </span>
             </div>
-            <span className="trade-player__val">{ecrToTradeValue(p.ecr).toFixed(1)}</span>
+            <span className="trade-player__val">{playerTradeValue(p).toFixed(1)}</span>
             <button
               type="button"
               className="trade-player__remove"
@@ -203,7 +213,7 @@ export default function TradeAnalyzer() {
   useEffect(() => {
     let cancelled = false;
     setRankings({ status: 'loading' });
-    fetch('/api/rankings?page_type=redraft-overall', { credentials: 'include' })
+    fetch('/api/rankings?page_type=sleeper-adp-half', { credentials: 'include' })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -308,7 +318,12 @@ export default function TradeAnalyzer() {
         const row = ecrBySleeper.get(String(id));
         if (row) list.push(toTradePlayer(row));
       }
-      list.sort((a, b) => Number(a.ecr) - Number(b.ecr));
+      list.sort((a, b) => {
+        const ae = Number(a.ecr);
+        const be = Number(b.ecr);
+        if (Number.isFinite(ae) && Number.isFinite(be) && ae !== be) return ae - be;
+        return playerTradeValue(b) - playerTradeValue(a);
+      });
       out.set(ownerId, list);
     }
     return out;
@@ -341,7 +356,11 @@ export default function TradeAnalyzer() {
   }, [managerA, rostersByOwner, selectedKeys]);
 
   const analysis = useMemo(
-    () => analyzeTrade(sideA, sideB, { packageAdjust: true }),
+    () =>
+      analyzeTrade(sideA, sideB, {
+        packageAdjust: true,
+        ...TRADE_VALUE_DEFAULTS,
+      }),
     [sideA, sideB],
   );
 
@@ -368,6 +387,7 @@ export default function TradeAnalyzer() {
       opts: {
         packageAdjust: true,
         wantPos: finderPos || null,
+        ...TRADE_VALUE_DEFAULTS,
       },
     });
   }, [finderRan, finderFocal, finderPos, rostersByOwner, managers]);
@@ -433,11 +453,27 @@ export default function TradeAnalyzer() {
   return (
     <div className="page trade-page">
       <header className="page-header">
-        <p className="eyebrow">Half-PPR · redraft</p>
+        <p className="eyebrow">Half-PPR · Sleeper ADP</p>
         <h1>Trade analyzer</h1>
-        {rankings.status === 'ready' && rankings.data.scrape_date && (
+        {rankings.status === 'ready' && (
           <p className="trade-source">
-            ECR as of <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
+            {rankings.data.season ? (
+              <>
+                Sleeper {rankings.data.season} Half-PPR ADP
+                {rankings.data.scrape_date ? (
+                  <>
+                    {' '}
+                    · updated <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
+                  </>
+                ) : null}
+              </>
+            ) : rankings.data.scrape_date ? (
+              <>
+                ADP as of <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
+              </>
+            ) : (
+              'Sleeper Half-PPR ADP'
+            )}
             {rosterCtx.status === 'ready' && rosterCtx.season
               ? ` · Rosters from ${rosterCtx.season}`
               : null}
@@ -470,8 +506,8 @@ export default function TradeAnalyzer() {
         <div className="trade-help__body">
           <ol className="trade-help__steps">
             <li>
-              <strong>Player value</strong> — each player gets points from their Half-PPR expert rank
-              (ECR). Better ranks = more points. Top guys are worth much more than depth pieces.
+              <strong>Player value</strong> — each player is ranked by Sleeper Half-PPR ADP (draft
+              market), then scored with a decay curve so top picks are worth much more than depth.
             </li>
             <li>
               <strong>Fair deal?</strong> — we add up both sides. If the totals are close, it&apos;s
@@ -480,11 +516,12 @@ export default function TradeAnalyzer() {
             </li>
             <li>
               <strong>Starter upgrade</strong> — we rebuild each team&apos;s best lineup (QB, RBs,
-              WRs, TE, FLEX, DST) before and after the trade. Green means your starters got better.
+              WRs, TE, FLEX, DST) before and after the trade using those market values. Green means
+              your starters got better.
             </li>
             <li>
               <strong>Trade finder</strong> — scans simple swaps across the league and keeps deals
-              that look fair on value <em>and</em> help at least one starting lineup.
+              that look fair on ADP value <em>and</em> help at least one starting lineup.
             </li>
           </ol>
           <p className="muted trade-help__note">
@@ -537,7 +574,7 @@ export default function TradeAnalyzer() {
                   {labelA} starter holes: <strong>{needsPreview.join(', ')}</strong>
                 </p>
               ) : managerA ? (
-                <p className="muted trade-teams__needs">{labelA} starters look filled on ECR depth.</p>
+                <p className="muted trade-teams__needs">{labelA} starters look filled on ADP depth.</p>
               ) : null}
             </div>
           )}
@@ -755,7 +792,7 @@ export default function TradeAnalyzer() {
                     Trade finder
                   </h2>
                   <p className="muted trade-finder__sub">
-                    Scans 1-for-1 and simple 2-for-1 packages for fair ECR deals that improve
+                    Scans 1-for-1 and simple 2-for-1 packages for fair ADP deals that improve
                     starters. Optionally filter for a position you want to receive.
                   </p>
                 </div>
@@ -809,8 +846,8 @@ export default function TradeAnalyzer() {
               {finderRan && suggestions.length === 0 && (
                 <p className="muted">
                   {finderPos
-                    ? `No fair ${finderPos} deals that improve starters within a slight ECR edge.`
-                    : 'No mutual upgrades that stay within a slight ECR edge.'}
+                    ? `No fair ${finderPos} deals that improve starters within a slight ADP edge.`
+                    : 'No mutual upgrades that stay within a slight ADP edge.'}
                 </p>
               )}
 
@@ -855,8 +892,8 @@ export default function TradeAnalyzer() {
           )}
 
           {/* <p className="muted trade-footnote">
-            Chart values decay from ECR rank 1 (100 pts). Starter upgrades rebuild each roster into
-            1 QB / 2 RB / 2 WR / 1 TE / 2 FLEX / 1 DST using ECR trade value. Unranked roster players
+            Values decay from Sleeper ADP rank 1 (100 pts). Starter upgrades rebuild each roster into
+            1 QB / 2 RB / 2 WR / 1 TE / 2 FLEX / 1 DST. Players without ADP
             are ignored.
           </p> */}
         </>

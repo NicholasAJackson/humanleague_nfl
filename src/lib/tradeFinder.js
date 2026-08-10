@@ -1,4 +1,4 @@
-import { analyzeTrade } from './tradeValue.js';
+import { analyzeTrade, playerTradeValue } from './tradeValue.js';
 import {
   normalizeDraftPos,
   positionFillsStarterNeed,
@@ -36,8 +36,8 @@ function playerId(p) {
 
 function sortAssets(players) {
   return [...(players || [])]
-    .filter((p) => p && playerId(p) && Number.isFinite(Number(p.ecr)))
-    .sort((a, b) => Number(a.ecr) - Number(b.ecr));
+    .filter((p) => p && playerId(p) && playerTradeValue(p) > 0)
+    .sort((a, b) => playerTradeValue(b) - playerTradeValue(a));
 }
 
 function assetsAtPos(players, pos) {
@@ -83,7 +83,7 @@ function pitchFor(impact, partnerLabel, send, receive) {
 }
 
 function evaluateCandidate(rosterA, rosterB, sideAGets, sideBGets, meta, opts) {
-  const chart = analyzeTrade(sideAGets, sideBGets, { packageAdjust: opts.packageAdjust });
+  const chart = analyzeTrade(sideAGets, sideBGets, opts);
   if (bandRank(chart.fairness.band) > bandRank(opts.maxFairBand)) return null;
 
   const impact = scoreTradeRosterImpact(rosterA, rosterB, sideAGets, sideBGets, opts);

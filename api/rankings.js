@@ -8,11 +8,13 @@ const FP_API_BASE = 'https://api.fantasypros.com/public/v2/json';
 const ECR_PAGE_TYPES = new Set(['redraft-overall']);
 const FP_PAGE_TYPES = new Set(['fp-ecr-half']);
 const SLEEPER_ADP_PAGE_TYPES = new Set(['sleeper-adp-half']);
+const SLEEPER_PROJ_PAGE_TYPES = new Set(['sleeper-proj-half']);
 
 const ALLOWED_PAGE_TYPES = new Set([
   ...ECR_PAGE_TYPES,
   ...FP_PAGE_TYPES,
   ...SLEEPER_ADP_PAGE_TYPES,
+  ...SLEEPER_PROJ_PAGE_TYPES,
 ]);
 
 const DEFAULT_PAGE_TYPE = 'redraft-overall';
@@ -47,6 +49,11 @@ const _fpInflight = new Map();
 let _sleeperAdpCache = null;
 /** @type {Promise<object> | null} */
 let _sleeperAdpInflight = null;
+
+/** @type {{ fetchedAt: number, scrapeDate: string|null, players: object[], page_type?: string } | null} */
+let _sleeperProjCache = null;
+/** @type {Promise<object> | null} */
+let _sleeperProjInflight = null;
 
 /** Minimal RFC 4180 CSV parser. Handles quoted fields and embedded commas/newlines. */
 function parseCsv(text) {
@@ -412,6 +419,44 @@ function normalizeSleeperAdpPlayer(row, byeByTeam) {
   };
 }
 
+/** Season Half-PPR projections — keep anyone with projected points (ADP optional). */
+function normalizeSleeperProjPlayer(row, byeByTeam) {
+  const stats = row && row.stats && typeof row.stats === 'object' ? row.stats : {};
+  const ptsHalf = toNum(stats.pts_half_ppr);
+  if (ptsHalf == null || ptsHalf <= 0) return null;
+
+  const player = row.player && typeof row.player === 'object' ? row.player : {};
+  const first = String(player.first_name || '').trim();
+  const last = String(player.last_name || '').trim();
+  const name = `${first} ${last}`.trim() || String(row.player_id || '');
+  const pos = normalizeSleeperPos(player.position || (player.fantasy_positions || [])[0]);
+  const sleeperId = row.player_id != null ? String(row.player_id) : null;
+  const team = String(player.team || row.team || '').trim();
+  const injury = String(player.injury_status || '').trim() || null;
+  const yearsExp = toNum(player.years_exp);
+  const adp = toNum(stats.adp_half_ppr);
+  const bye =
+    team && byeByTeam instanceof Map && byeByTeam.has(team) ? byeByTeam.get(team) : null;
+
+  return {
+    ecr: adp != null && adp > 0 && adp < SLEEPER_ADP_MAX ? adp : null,
+    sd: null,
+    best: null,
+    worst: null,
+    name,
+    pos,
+    team,
+    bye,
+    pts_half_ppr: ptsHalf,
+    injury_status: injury,
+    years_exp: yearsExp,
+    owned_avg: null,
+    rank_delta: null,
+    fp_id: null,
+    sleeper_id: sleeperId,
+  };
+}
+
 /** Derive each NFL team's bye week from the regular-season schedule (17 games / 18 weeks). */
 async function fetchTeamByeWeeks(season) {
   const url = `https://api.sleeper.com/schedule/nfl/regular/${encodeURIComponent(season)}`;
@@ -527,6 +572,84 @@ async function getSleeperAdpRankings() {
   return _sleeperAdpInflight;
 }
 
+async function fetchSleeperProjHalf() {
+  const season = await fetchSleeperNflSeason();
+  const params = new URLSearchParams({
+    season_type: 'regular',
+    order_by: 'pts_half_ppr',
+  });
+  for (const pos of ['QB', 'RB', 'WR', 'TE', 'DEF']) {
+    params.append('position[]', pos);
+  }
+
+  const url = `https://api.sleeper.com/projections/nfl/${season}?${params}`;
+  const [projRes, byeByTeam] = await Promise.all([
+    fetch(url, {
+      headers: { 'user-agent': 'humanleague-nfl/rankings', accept: 'application/json' },
+    }),
+    fetchTeamByeWeeks(season).catch((err) => {
+      console.warn('rankings: bye week lookup failed', err);
+      return new Map();
+    }),
+  ]);
+
+  if (!projRes.ok) {
+    const body = await projRes.text().catch(() => '');
+    throw new Error(`Sleeper projections responded ${projRes.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
+  }
+
+  const raw = await projRes.json();
+  const rows = Array.isArray(raw) ? raw : [];
+  const players = rows
+    .map((row) => normalizeSleeperProjPlayer(row, byeByTeam))
+    .filter(Boolean)
+    .sort((a, b) => Number(b.pts_half_ppr) - Number(a.pts_half_ppr));
+
+  let latestMs = 0;
+  for (const row of rows) {
+    const ms = Number(row.updated_at || row.last_modified || 0);
+    if (Number.isFinite(ms) && ms > latestMs) latestMs = ms;
+  }
+
+  return {
+    page_type: 'sleeper-proj-half',
+    scrape_date: latestMs > 0 ? new Date(latestMs).toISOString() : null,
+    fetched_at: Date.now(),
+    count: players.length,
+    players,
+    source: 'sleeper',
+    scoring: 'HALF',
+    ranking_type: 'PROJECTION',
+    season,
+  };
+}
+
+async function getSleeperProjRankings() {
+  const now = Date.now();
+  if (_sleeperProjCache && now - _sleeperProjCache.fetched_at < SLEEPER_ADP_CACHE_TTL_MS) {
+    return _sleeperProjCache;
+  }
+  if (_sleeperProjInflight) return _sleeperProjInflight;
+
+  const stale = _sleeperProjCache;
+  _sleeperProjInflight = (async () => {
+    try {
+      const next = await fetchSleeperProjHalf();
+      _sleeperProjCache = next;
+      return next;
+    } catch (err) {
+      if (stale && now - stale.fetched_at < SLEEPER_ADP_STALE_TTL_MS) {
+        console.warn('rankings: Sleeper projection fetch failed, serving stale cache', err);
+        return stale;
+      }
+      throw err;
+    } finally {
+      _sleeperProjInflight = null;
+    }
+  })();
+  return _sleeperProjInflight;
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') {
@@ -563,6 +686,15 @@ export default async function handler(req, res) {
 
     if (SLEEPER_ADP_PAGE_TYPES.has(pageType)) {
       const payload = await getSleeperAdpRankings();
+      res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
+      res.status(200);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.send(JSON.stringify(payload));
+      return;
+    }
+
+    if (SLEEPER_PROJ_PAGE_TYPES.has(pageType)) {
+      const payload = await getSleeperProjRankings();
       res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
       res.status(200);
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
