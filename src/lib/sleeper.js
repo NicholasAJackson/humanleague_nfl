@@ -28,6 +28,52 @@ export function fetchMatchups(leagueId, week) {
   return getJSON(`/league/${leagueId}/matchups/${week}`);
 }
 
+/** Current NFL week / season from Sleeper (`display_week`, `league_season`, …). */
+export function fetchNflState() {
+  return getJSON('/state/nfl');
+}
+
+const _nflScheduleCache = new Map();
+
+/**
+ * Regular-season NFL schedule (`home`, `away`, `date`, `status`, `week`).
+ * Tries the public Sleeper `.com` host from the browser; falls back to
+ * `/api/nfl-schedule` if CORS or the upstream request fails.
+ */
+export function fetchNflSchedule(season) {
+  const y = String(season || '').trim();
+  if (!/^\d{4}$/.test(y)) {
+    return Promise.reject(new Error('NFL schedule needs a 4-digit season'));
+  }
+  if (!_nflScheduleCache.has(y)) {
+    _nflScheduleCache.set(
+      y,
+      (async () => {
+        try {
+          const res = await fetch(
+            `https://api.sleeper.com/schedule/nfl/regular/${encodeURIComponent(y)}`,
+          );
+          if (res.ok) {
+            const raw = await res.json();
+            if (Array.isArray(raw)) return raw;
+          }
+        } catch {
+          // CORS or network — try the same-origin proxy.
+        }
+        const res = await fetch(`/api/nfl-schedule?season=${encodeURIComponent(y)}`);
+        if (!res.ok) {
+          throw new Error(`NFL schedule failed: ${res.status}`);
+        }
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.games)) return data.games;
+        return [];
+      })(),
+    );
+  }
+  return _nflScheduleCache.get(y);
+}
+
 export function fetchPlayoffBracket(leagueId, kind = 'winners') {
   return getJSON(`/league/${leagueId}/${kind}_bracket`);
 }

@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext.jsx';
 import { useLeague } from '../LeagueContext.jsx';
 import { fetchLeague, fetchUsers } from '../lib/sleeper.js';
 import { fetchHallOfFame } from '../lib/hallOfFame.js';
+import NflMatchups from '../components/NflMatchups.jsx';
 import './Home.css';
 
 function splitCountdown(msRemaining) {
@@ -29,6 +30,8 @@ function DraftCountdown() {
   if (draftTs == null) return null;
 
   const parts = splitCountdown(draftTs - now);
+  if (parts.done) return null;
+
   const draftLabel = new Date(draftTs).toLocaleString(undefined, {
     weekday: 'short',
     month: 'short',
@@ -37,15 +40,6 @@ function DraftCountdown() {
     minute: '2-digit',
     timeZoneName: 'short',
   });
-
-  if (parts.done) {
-    return (
-      <div className="home-countdown" role="status">
-        <p className="home-countdown__label">Draft time</p>
-        <p className="home-countdown__live">It&apos;s draft night — good luck.</p>
-      </div>
-    );
-  }
 
   const cells = [
     { value: parts.days, label: parts.days === 1 ? 'day' : 'days' },
@@ -145,7 +139,9 @@ export default function Home() {
           <h1 className="home-hero__title">{title}</h1>
           <p className="home-hero__intro">
             {isHumanLeague ? (
-              <span className="home-hero__intro-lead">Keepers are locked, the draft is next...</span>
+              <span className="home-hero__intro-lead">
+                The season is underway — expand this week&apos;s NFL games to see which league starters are in each matchup.
+              </span>
             ) : (
               <span className="home-hero__intro-lead">
                 Browsing this Sleeper league — stats, drafts, rankings, and trades.
@@ -162,6 +158,9 @@ export default function Home() {
       </section>
 
       {!leagueId && <NoConfig />}
+      {leagueId ? (
+        <NflMatchups leagueId={leagueId} viewerOwnerId={user?.sleeperUserId} />
+      ) : null}
       {leagueId && hof.status === 'loading' && (
         <div className="card" aria-busy="true">
           <div className="skeleton" style={{ height: 20, width: '35%', marginBottom: 12 }} />
