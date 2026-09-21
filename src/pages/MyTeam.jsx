@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { config, leagueFormat, canAccessKeepers } from '../config.js';
+import { config, leagueFormat, canAccessKeepers, canAccessTradeAnalyzer } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
 import BottomSheet from '../components/BottomSheet.jsx';
 import {
@@ -11,6 +11,9 @@ import {
 } from '../lib/sleeper.js';
 import { computeStats, getRegularSeasonMatchupPairs } from '../lib/stats.js';
 import { loadKeeperRankingsContext } from '../lib/loadKeeperRankingsContext.js';
+import { rosterPlayerIdSet } from '../lib/keeperRankings.js';
+import { formatWeightSummary } from '../lib/tradeBlend.js';
+import { findWaiverUpgrades, valuedPlayerFromSources } from '../lib/waiverUpgrades.js';
 import './MyTeam.css';
 
 function fmtNominationRow(n, lookup) {
@@ -384,6 +387,127 @@ function RosterTable({ roster, lookup, onViewRankings }) {
   );
 }
 
+function fmtWaiverUpgrade(n) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const v = Number(n);
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}`;
+}
+
+function WaiverUpgradesCard({ blend, lookup, roster, rosters, showTradeLink, onViewPlayer }) {
+  const result = useMemo(() => {
+    if (blend.status !== 'ready' || !roster) return null;
+    const players = blend.data?.players || [];
+    const blendById = new Map();
+    for (const p of players) {
+      if (p.sleeper_id) blendById.set(String(p.sleeper_id), p);
+    }
+    const owned = rosterPlayerIdSet(rosters);
+    const rosterPlayers = rosterPlayerIds(roster).map((id) =>
+      valuedPlayerFromSources(id, blendById, lookup),
+    );
+    const freeAgents = [];
+    for (const p of players) {
+      const sid = p.sleeper_id != null ? String(p.sleeper_id) : '';
+      if (!sid || owned.has(sid)) continue;
+      freeAgents.push(valuedPlayerFromSources(sid, blendById, lookup));
+    }
+    return findWaiverUpgrades({ rosterPlayers, freeAgents });
+  }, [blend, lookup, roster, rosters]);
+
+  const weightLine =
+    blend.status === 'ready' && blend.data?.weights
+      ? formatWeightSummary(blend.data.weights, (blend.data.recent_weeks || []).length)
+      : '';
+
+  return (
+    <section className="card my-team-waivers-card">
+      <h2>Waiver upgrades</h2>
+      <p className="muted my-team-roster-hint">
+        Unowned players who would raise your optimal starter lineup on in-season trade value (same
+        blend as the Trade analyzer). Adds only — no drop required for the delta.
+        {weightLine ? ` ${weightLine}.` : ''}
+      </p>
+
+      {(blend.status === 'idle' || blend.status === 'loading') && (
+        <p className="muted">Checking the wire…</p>
+      )}
+      {blend.status === 'error' && (
+        <p className="muted" role="alert">
+          Could not load waiver values: {blend.message}
+        </p>
+      )}
+      {blend.status === 'ready' && result && result.holes.length > 0 && (
+        <p className="my-team-waivers-holes">
+          Starter holes:{' '}
+          {result.holes.map((h) => (
+            <span key={h} className="my-team-waivers-chip">
+              {h}
+            </span>
+          ))}
+        </p>
+      )}
+      {blend.status === 'ready' && result && result.upgrades.length === 0 && (
+        <p className="muted">No unowned players would raise your starting lineup on current values.</p>
+      )}
+      {blend.status === 'ready' && result && result.upgrades.length > 0 && (
+        <div className="my-team-roster-scroll">
+          <table className="my-team-roster my-team-waivers-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Pos</th>
+                <th>Slot</th>
+                <th>Upgrade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.upgrades.map((u) => {
+                const id = String(u.player.sleeper_id);
+                const pos = u.player.pos || '—';
+                const name = u.player.name || id;
+                return (
+                  <tr key={id}>
+                    <td>
+                      {onViewPlayer ? (
+                        <button
+                          type="button"
+                          className="my-team-roster__player-hit"
+                          onClick={() => onViewPlayer(id)}
+                          aria-label={`Rankings for ${name}`}
+                        >
+                          {name}
+                        </button>
+                      ) : (
+                        name
+                      )}
+                      {u.fillsNeed ? (
+                        <span className="my-team-waivers-need">Fills hole</span>
+                      ) : null}
+                    </td>
+                    <td>
+                      <span className={`my-team-pos my-team-pos--${String(pos).toLowerCase()}`}>
+                        {pos}
+                      </span>
+                    </td>
+                    <td>{u.slot}</td>
+                    <td className="my-team-waivers-delta">{fmtWaiverUpgrade(u.upgrade)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {showTradeLink ? (
+        <p className="my-team-waivers-link">
+          <Link to="/trades">Open Trade analyzer →</Link>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default function MyTeam() {
   const { ready, authenticated, authEnabled, devBypass, user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -397,6 +521,7 @@ export default function MyTeam() {
   const [nominations, setNominations] = useState([]);
   const [rankingsFocusId, setRankingsFocusId] = useState(null);
   const [ecrRankings, setEcrRankings] = useState({ status: 'idle' });
+  const [blendRankings, setBlendRankings] = useState({ status: 'idle' });
   const [keeperCtx, setKeeperCtx] = useState({ status: 'idle' });
 
   useEffect(() => {
@@ -428,6 +553,31 @@ export default function MyTeam() {
       .catch((err) => {
         if (!cancelled)
           setEcrRankings({ status: 'error', message: err.message || String(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, authenticated, devBypass]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!ready || !authenticated || devBypass) {
+      setBlendRankings({ status: 'idle' });
+      return;
+    }
+    setBlendRankings({ status: 'loading' });
+    fetch('/api/rankings?page_type=sleeper-trade-blend', { credentials: 'include' })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+        return data;
+      })
+      .then((data) => {
+        if (!cancelled) setBlendRankings({ status: 'ready', data });
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setBlendRankings({ status: 'error', message: err.message || String(err) });
       });
     return () => {
       cancelled = true;
@@ -774,6 +924,15 @@ export default function MyTeam() {
         <p className="muted my-team-roster-hint">Tap a player name for expert / keeper stats (same data as Rankings).</p>
         <RosterTable roster={roster} lookup={lookup} onViewRankings={(id) => setRankingsFocusId(id)} />
       </section>
+
+      <WaiverUpgradesCard
+        blend={blendRankings}
+        lookup={lookup}
+        roster={roster}
+        rosters={state.bundle?.rosters}
+        showTradeLink={canAccessTradeAnalyzer(user, devBypass)}
+        onViewPlayer={(id) => setRankingsFocusId(id)}
+      />
 
       <PlayerRankingsSheet
         open={rankingsFocusId != null}

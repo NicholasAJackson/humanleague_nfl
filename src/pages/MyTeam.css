@@ -277,6 +277,60 @@
   border-top: 1px solid var(--color-border);
 }
 
+.my-team-waivers-card h2 {
+  margin: 0 0 var(--space-3);
+  font-size: 1.05rem;
+}
+
+.my-team-waivers-holes {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-sm);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.my-team-waivers-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+}
+
+.my-team-waivers-need {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+  vertical-align: middle;
+}
+
+.my-team-waivers-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #4ade80;
+}
+
+.my-team-waivers-table th:last-child,
+.my-team-waivers-table td:last-child {
+  text-align: right;
+}
+
+.my-team-waivers-link {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-sm);
+}
+
 .my-team-keepers-card .muted {
   margin-top: var(--space-2);
 }
