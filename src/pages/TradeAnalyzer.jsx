@@ -24,7 +24,9 @@ import './TradeAnalyzer.css';
 
 const MAX_PER_SIDE = 5;
 const NONE = '';
-/** Flip when re-enabling ESPN news + Sleeper trending on the analyzer. */
+/** Flip when re-enabling ESPN news + Sleeper trending on the analyzer.
+ *  Also restore `api/_trade-hype.js` → `api/trade-hype.js`.
+ */
 const SHOW_TRADE_HYPE = false;
 
 function formatScrapeDate(iso) {
@@ -239,7 +241,7 @@ export default function TradeAnalyzer() {
   useEffect(() => {
     let cancelled = false;
     setRankings({ status: 'loading' });
-    fetch('/api/trade-values', { credentials: 'include' })
+    fetch('/api/rankings?page_type=sleeper-trade-blend', { credentials: 'include' })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);

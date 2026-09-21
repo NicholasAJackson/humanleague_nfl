@@ -1,6 +1,8 @@
 import { getSql, rateLimit, clientIp, readJsonBody, send } from './_db.js';
 import { assertSiteAuth, getSessionPayload } from './_auth.js';
 
+// Parked for Hobby 12-function cap. Restore: rename this file to keeper-finals.js
+
 const USER_ID_RE = /^[0-9a-z]{8,40}$/i;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

@@ -2,6 +2,8 @@ import { getSql, rateLimit, clientIp, readJsonBody, send } from './_db.js';
 import { assertSiteAuth, getSessionPayload } from './_auth.js';
 import { areRuleChangesClosed, RULE_CHANGES_CLOSED_ERROR } from './_ruleChangesWindow.js';
 
+// Parked for Hobby 12-function cap. Restore: rename this file to votes.js
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function handler(req, res) {

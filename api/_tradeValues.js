@@ -1,4 +1,3 @@
-import { send } from './_db.js';
 import {
   TRADE_BLEND_DEFAULTS,
   blendTradePlayers,
@@ -6,7 +5,7 @@ import {
   scoredNflWeeks,
 } from '../src/lib/tradeBlend.js';
 
-// Public: blended values are NFL-wide (not league-private). Guest browse needs this.
+// Shared by GET /api/rankings?page_type=sleeper-trade-blend (not a Vercel function).
 
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const STALE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -223,7 +222,7 @@ async function buildPayload() {
   };
 }
 
-async function getPayload() {
+export async function getTradeValuesPayload() {
   const now = Date.now();
   if (_cache && now - _cache.fetchedAt < CACHE_TTL_MS) return _cache.payload;
   if (_inflight) return _inflight;
@@ -245,22 +244,4 @@ async function getPayload() {
     }
   })();
   return _inflight;
-}
-
-export default async function handler(req, res) {
-  try {
-    if (req.method !== 'GET') {
-      res.setHeader('Allow', 'GET');
-      return send(res, 405, { error: 'Method not allowed' });
-    }
-
-    const payload = await getPayload();
-    res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
-    res.status(200);
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.send(JSON.stringify(payload));
-  } catch (err) {
-    console.error('trade-values handler error', err);
-    return send(res, 502, { error: 'Could not load trade values (upstream unavailable)' });
-  }
 }

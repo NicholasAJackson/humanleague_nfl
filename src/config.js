@@ -73,7 +73,12 @@ export function canAccessMockDraft(user, devBypass, isGuest = false) {
   return false;
 }
 
-/** Flip these when reopening pages to the league. */
+/** Flip these when reopening pages to the league.
+ *  Also restore the matching API file (strip the leading `_`):
+ *  Rules → `_rules.js`, `_votes.js`, `_rule-posts.js`
+ *  Ceremony / keepers locked-in → `_keeper-finals.js`
+ *  Trade hype → `_trade-hype.js` and `SHOW_TRADE_HYPE` in TradeAnalyzer.jsx
+ */
 export const SHOW_MOCK_DRAFT_PAGE = false;
 export const SHOW_KEEPERS_PAGE = false;
 export const SHOW_CEREMONY_PAGE = false;

@@ -1,4 +1,5 @@
 import { send } from './_db.js';
+import { getTradeValuesPayload } from './_tradeValues.js';
 // Public: rankings are third-party consensus/ADP (not league-private). Guest browse mode needs this.
 
 const ECR_URL = 'https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_fpecr_latest.csv';
@@ -9,12 +10,14 @@ const ECR_PAGE_TYPES = new Set(['redraft-overall']);
 const FP_PAGE_TYPES = new Set(['fp-ecr-half']);
 const SLEEPER_ADP_PAGE_TYPES = new Set(['sleeper-adp-half']);
 const SLEEPER_PROJ_PAGE_TYPES = new Set(['sleeper-proj-half']);
+const SLEEPER_TRADE_BLEND_PAGE_TYPES = new Set(['sleeper-trade-blend']);
 
 const ALLOWED_PAGE_TYPES = new Set([
   ...ECR_PAGE_TYPES,
   ...FP_PAGE_TYPES,
   ...SLEEPER_ADP_PAGE_TYPES,
   ...SLEEPER_PROJ_PAGE_TYPES,
+  ...SLEEPER_TRADE_BLEND_PAGE_TYPES,
 ]);
 
 const DEFAULT_PAGE_TYPE = 'redraft-overall';
@@ -695,6 +698,15 @@ export default async function handler(req, res) {
 
     if (SLEEPER_PROJ_PAGE_TYPES.has(pageType)) {
       const payload = await getSleeperProjRankings();
+      res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
+      res.status(200);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.send(JSON.stringify(payload));
+      return;
+    }
+
+    if (SLEEPER_TRADE_BLEND_PAGE_TYPES.has(pageType)) {
+      const payload = await getTradeValuesPayload();
       res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
       res.status(200);
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

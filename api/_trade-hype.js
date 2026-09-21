@@ -1,4 +1,5 @@
 import { send } from './_db.js';
+// Parked for Hobby 12-function cap. Restore: rename this file to trade-hype.js
 // Public: ESPN/Sleeper trend proxies (not league-private). Guest browse mode needs this.
 
 const ESPN_NEWS_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50';

@@ -3,6 +3,8 @@ import { assertSiteAuth } from './_auth.js';
 import { isUndefinedRelation } from './_pgErrors.js';
 import { areRuleChangesClosed, RULE_CHANGES_CLOSED_ERROR } from './_ruleChangesWindow.js';
 
+// Parked for Hobby 12-function cap. Restore: rename this file to rule-posts.js
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
