@@ -135,6 +135,26 @@ export function needHoleLabels(needs) {
 }
 
 /**
+ * How many players sit above dedicated starter slots at `pos` (FLEX not counted).
+ * Positive means they can trade one and still fill the starting slot.
+ */
+export function extraAtPosition(needs, pos, starterSlots = leagueFormat.starterSlots) {
+  const slots = getStarterSlots(starterSlots);
+  const p = normalizeDraftPos(pos);
+  if (!p || slots[p] == null) return 0;
+  const count = needs?.counts?.[p] || 0;
+  return count - (slots[p] || 0);
+}
+
+/** True if this roster has a starter hole or no extra depth at `pos`. */
+export function positionIsWeak(needs, pos, starterSlots = leagueFormat.starterSlots) {
+  const p = normalizeDraftPos(pos);
+  if (!p || !needs) return false;
+  if (p === 'FLEX') return (needs.FLEX || 0) > 0;
+  if ((needs[p] || 0) > 0) return true;
+  return extraAtPosition(needs, p, starterSlots) <= 0;
+}
+/**
  * Positions where the roster already exceeds dedicated starter slots (surplus depth).
  * FLEX-eligible overflow counts toward surplus.
  */

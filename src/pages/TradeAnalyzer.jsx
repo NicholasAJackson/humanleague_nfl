@@ -546,7 +546,9 @@ export default function TradeAnalyzer() {
             </li>
             <li>
               <strong>Trade finder</strong> — scans simple swaps across the league and keeps deals
-              that look fair on blended value <em>and</em> help at least one starting lineup.
+              that look fair on blended value <em>and</em> help at least one starting lineup. If you
+              pick a position you want, it only hits teams that can spare one and never suggests a
+              same-position swap.
             </li>
           </ol>
           <p className="muted trade-help__note">
@@ -818,7 +820,9 @@ export default function TradeAnalyzer() {
                   </h2>
                   <p className="muted trade-finder__sub">
                     Scans 1-for-1 and simple 2-for-1 packages for fair blended-value deals that
-                    improve starters. Optionally filter for a position you want to receive.
+                    improve starters. “Looking for” a position means you receive that spot from a
+                    team that has extras, and you send a position they are thin at — not a straight
+                    swap at the same position.
                   </p>
                 </div>
               </header>
@@ -871,7 +875,7 @@ export default function TradeAnalyzer() {
               {finderRan && suggestions.length === 0 && (
                 <p className="muted">
                   {finderPos
-                    ? `No fair ${finderPos} deals that improve starters within a slight value edge.`
+                    ? `No fair ${finderPos} deals: need a partner who is deep at ${finderPos} and thin at a position you can send.`
                     : 'No mutual upgrades that stay within a slight value edge.'}
                 </p>
               )}

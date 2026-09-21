@@ -7,20 +7,23 @@ export const DEFAULT_RULES_CHANGES_CLOSE_AT = DEFAULT_KEEPERS_REVEAL_AT;
 /** League startup draft — 8 Aug 2026, 7:00pm BST. Override with `VITE_DRAFT_AT`. */
 export const DEFAULT_DRAFT_AT = '2026-08-08T19:00:00+01:00';
 
+const viteEnv =
+  typeof import.meta !== 'undefined' && import.meta.env && typeof import.meta.env === 'object'
+    ? import.meta.env
+    : {};
+
 export const config = {
-  leagueId: import.meta.env.VITE_SLEEPER_LEAGUE_ID || '',
+  leagueId: viteEnv.VITE_SLEEPER_LEAGUE_ID || '',
   /** ISO 8601, e.g. `2026-08-20T17:00:00-04:00`. Uses {@link DEFAULT_KEEPERS_REVEAL_AT} when env unset. */
-  keepersRevealAt: (import.meta.env.VITE_KEEPERS_REVEAL_AT || DEFAULT_KEEPERS_REVEAL_AT).trim(),
+  keepersRevealAt: (viteEnv.VITE_KEEPERS_REVEAL_AT || DEFAULT_KEEPERS_REVEAL_AT).trim(),
   /** ISO 8601. Uses {@link DEFAULT_RULES_CHANGES_CLOSE_AT} when env unset. */
-  rulesChangesCloseAt: (
-    import.meta.env.VITE_RULES_CHANGES_CLOSE_AT || DEFAULT_RULES_CHANGES_CLOSE_AT
-  ).trim(),
+  rulesChangesCloseAt: (viteEnv.VITE_RULES_CHANGES_CLOSE_AT || DEFAULT_RULES_CHANGES_CLOSE_AT).trim(),
   /** Startup draft kickoff (default: 8 Aug 2026, 7pm BST). Override with `VITE_DRAFT_AT`. */
-  draftAt: (import.meta.env.VITE_DRAFT_AT || DEFAULT_DRAFT_AT).trim(),
+  draftAt: (viteEnv.VITE_DRAFT_AT || DEFAULT_DRAFT_AT).trim(),
 };
 
 function envFlagTrue(name) {
-  const v = import.meta.env[name];
+  const v = viteEnv[name];
   if (typeof v !== 'string') return false;
   const s = v.trim().toLowerCase();
   return s === '1' || s === 'true' || s === 'yes' || s === 'on';
@@ -31,7 +34,7 @@ function envFlagTrue(name) {
  * even when site auth is off (dev bypass). Set `VITE_DEV_LOGIN_SCREEN=1` in `.env.local`.
  * Ignored in production builds.
  */
-export const DEV_LOGIN_SCREEN = Boolean(import.meta.env.DEV && envFlagTrue('VITE_DEV_LOGIN_SCREEN'));
+export const DEV_LOGIN_SCREEN = Boolean(viteEnv.DEV && envFlagTrue('VITE_DEV_LOGIN_SCREEN'));
 
 /**
  * Guest “browse another league” is commissioner tooling (plus local DEV).
@@ -39,8 +42,8 @@ export const DEV_LOGIN_SCREEN = Boolean(import.meta.env.DEV && envFlagTrue('VITE
  */
 export function canAccessGuestBrowse(user, devBypass, { hasRealSession } = {}) {
   if (user?.role === 'commissioner') return true;
-  if (import.meta.env.DEV && DEV_LOGIN_SCREEN && !hasRealSession) return true;
-  if (import.meta.env.DEV && devBypass) return true;
+  if (viteEnv.DEV && DEV_LOGIN_SCREEN && !hasRealSession) return true;
+  if (viteEnv.DEV && devBypass) return true;
   return false;
 }
 
@@ -69,7 +72,7 @@ export function canAccessMockDraft(user, devBypass, isGuest = false) {
   if (isGuest) return false;
   if (!SHOW_MOCK_DRAFT_PAGE) return false;
   if (user) return true;
-  if (import.meta.env.DEV && devBypass) return true;
+  if (viteEnv.DEV && devBypass) return true;
   return false;
 }
 
@@ -95,7 +98,7 @@ export function canAccessKeeperCeremony(user, devBypass, isGuest = false) {
   if (isGuest) return false;
   if (!SHOW_CEREMONY_PAGE) return false;
   if (user?.role === 'commissioner') return true;
-  if (import.meta.env.DEV && devBypass) return true;
+  if (viteEnv.DEV && devBypass) return true;
   return false;
 }
 
@@ -111,7 +114,7 @@ export function canAccessRules(isGuest = false) {
 export function canAccessTradeAnalyzer(user, devBypass, isGuest = false) {
   if (isGuest) return true;
   if (user) return true;
-  if (import.meta.env.DEV && devBypass) return true;
+  if (viteEnv.DEV && devBypass) return true;
   return false;
 }
 
