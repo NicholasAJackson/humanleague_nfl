@@ -3,6 +3,7 @@ import meHandler from './api/auth/me.js';
 import loginHandler from './api/auth/login.js';
 import logoutHandler from './api/auth/logout.js';
 import configHandler from './api/auth/config.js';
+import tradeValuesHandler from './api/trade-values.js';
 
 /** Vite's Node `res` lacks Express-style `status` / `send` used by `send()` in `api/_db.js`. */
 function patchRes(res) {
@@ -35,6 +36,20 @@ export function devAuthApiPlugin(mode) {
 
       server.middlewares.use(async (req, res, next) => {
         const path = (req.url || '').split('?')[0];
+        if (path === '/api/trade-values' && req.method === 'GET') {
+          patchRes(res);
+          try {
+            await tradeValuesHandler(req, res);
+          } catch (err) {
+            console.error('[dev-auth-api] trade-values', err);
+            if (!res.headersSent) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify({ error: 'Server error' }));
+            }
+          }
+          return;
+        }
         if (!path.startsWith('/api/auth/')) return next();
 
         patchRes(res);

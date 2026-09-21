@@ -1,8 +1,8 @@
 /**
  * Trade values for the analyzer.
  *
- * Preferred path: Sleeper Half-PPR ADP (draft market) → exponential rank decay.
- * `player.value` may precompute that decay; otherwise `ecr` / ADP is converted on the fly.
+ * Preferred path: precomputed `player.value` (in-season blend of ROS / recent / ADP).
+ * Otherwise `ecr` is converted with exponential rank decay.
  */
 
 export const TRADE_VALUE_DEFAULTS = {
@@ -124,14 +124,14 @@ export function evaluateTradeFairness(totalA, totalB, opts = {}) {
     label = 'Fair';
     summary =
       winner === 'even'
-        ? 'Both sides line up on Sleeper ADP value.'
+        ? 'Both sides line up on blended trade value.'
         : `Close enough — ${sideName} edges it by ${gapPct}%.`;
   } else if (band === 'slight') {
     label = 'Slight edge';
-    summary = `${sideName} gets more ADP value (~${gapPct}% gap).`;
+    summary = `${sideName} gets more trade value (~${gapPct}% gap).`;
   } else {
     label = 'Lopsided';
-    summary = `${sideName} wins big on ADP value (~${gapPct}% gap).`;
+    summary = `${sideName} wins big on trade value (~${gapPct}% gap).`;
   }
 
   return { gap, gapPct, winner, band, label, summary };

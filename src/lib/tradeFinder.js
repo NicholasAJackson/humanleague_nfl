@@ -78,7 +78,7 @@ function pitchFor(impact, partnerLabel, send, receive) {
     );
     if (theirSurplus) needBits.push(`${partnerLabel} is deep at ${normalizeDraftPos(theirSurplus.pos)}`);
   }
-  const why = needBits.length ? needBits.slice(0, 2).join('; ') : 'balanced ECR swap';
+  const why = needBits.length ? needBits.slice(0, 2).join('; ') : 'balanced value swap';
   return `You send ${sendNames} → get ${recvNames}. ${why}.`;
 }
 

@@ -529,6 +529,12 @@
 .trade-player__meta {
   font-size: var(--fs-xs);
   color: var(--color-text-dim);
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.trade-player--injured {
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .trade-player__val {

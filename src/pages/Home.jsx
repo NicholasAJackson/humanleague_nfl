@@ -219,7 +219,7 @@ export default function Home() {
               to="/trades"
               icon={TradeIcon}
               title="Trade analyzer"
-              body="Compare sides using rankings and current rosters."
+              body="Compare sides using in-season value and current rosters."
             />
           </>
         )}

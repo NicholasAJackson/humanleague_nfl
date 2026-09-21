@@ -8,6 +8,7 @@ import {
   rosterPlayerIds,
 } from '../lib/sleeper.js';
 import { analyzeTrade, playerTradeValue, ecrToTradeValue, TRADE_VALUE_DEFAULTS } from '../lib/tradeValue.js';
+import { formatWeightSummary } from '../lib/tradeBlend.js';
 import {
   needHoleLabels,
   rosterStarterNeeds,
@@ -40,19 +41,50 @@ function playerKey(p) {
 }
 
 function toTradePlayer(p) {
-  const adp = Number(p.ecr);
+  const adp = Number(p.adp);
   const hasAdp = Number.isFinite(adp) && adp >= 1;
+  const explicit = p.value != null ? Number(p.value) : null;
+  const hasValue = explicit != null && Number.isFinite(explicit);
+  const rank = Number(p.ecr);
+  const hasRank = Number.isFinite(rank) && rank >= 1;
   return {
     name: p.name,
     pos: p.pos,
     team: p.team,
-    /** Sleeper Half-PPR ADP (draft-market rank). */
-    ecr: hasAdp ? adp : null,
-    /** Decayed trade points from ADP rank. */
-    value: hasAdp ? ecrToTradeValue(adp) : null,
+    ecr: hasRank ? rank : null,
+    value: hasValue ? Math.round(explicit * 10) / 10 : hasRank ? ecrToTradeValue(rank) : hasAdp ? ecrToTradeValue(adp) : null,
+    adp: hasAdp ? adp : null,
+    pts_ros: Number.isFinite(Number(p.pts_ros)) ? Number(p.pts_ros) : Number.isFinite(Number(p.pts_half_ppr)) ? Number(p.pts_half_ppr) : null,
+    pts_ytd: Number.isFinite(Number(p.pts_ytd)) ? Number(p.pts_ytd) : null,
+    pts_recent: Number.isFinite(Number(p.pts_recent)) ? Number(p.pts_recent) : null,
+    recent_games: Number.isFinite(Number(p.recent_games)) ? Number(p.recent_games) : null,
+    injury_status: String(p.injury_status || '').trim() || null,
+    bye: Number.isFinite(Number(p.bye)) ? Number(p.bye) : null,
     sleeper_id: p.sleeper_id || null,
     fp_id: p.fp_id || null,
   };
+}
+
+function fmtPts(n, digits = 1) {
+  if (n == null || !Number.isFinite(Number(n))) return null;
+  return Number(n).toFixed(digits);
+}
+
+function playerSignals(p) {
+  const bits = [];
+  if (p.pos) bits.push(p.pos);
+  if (p.team) bits.push(p.team);
+  const ros = fmtPts(p.pts_ros, 0);
+  if (ros) bits.push(`ROS ${ros}`);
+  const recent = fmtPts(p.pts_recent, 1);
+  if (recent) {
+    const games = Number(p.recent_games);
+    bits.push(Number.isFinite(games) && games > 0 ? `${games}w ${recent}` : `form ${recent}`);
+  }
+  if (p.adp != null) bits.push(`ADP ${Number(p.adp).toFixed(1)}`);
+  if (p.injury_status) bits.push(p.injury_status);
+  if (p.bye != null) bits.push(`Bye ${p.bye}`);
+  return bits.join(' · ');
 }
 
 function managerOptions(users) {
@@ -144,14 +176,7 @@ function SidePanel({
           {options.map((p) => {
             const key = playerKey(p);
             const val = playerTradeValue(p).toFixed(1);
-            const meta = [
-              p.pos,
-              p.team,
-              p.ecr != null ? `ADP ${Number(p.ecr).toFixed(1)}` : null,
-              val,
-            ]
-              .filter(Boolean)
-              .join(' · ');
+            const meta = [p.pos, p.team, val].filter(Boolean).join(' · ');
             return (
               <option key={key} value={key}>
                 {p.name} — {meta}
@@ -164,14 +189,15 @@ function SidePanel({
       <ul className="trade-players">
         {players.length === 0 && <li className="muted trade-players__empty">No players yet.</li>}
         {players.map((p) => (
-          <li key={playerKey(p)} className="trade-player">
+          <li
+            key={playerKey(p)}
+            className={
+              'trade-player' + (p.injury_status ? ' trade-player--injured' : '')
+            }
+          >
             <div className="trade-player__main">
               <span className="trade-player__name">{p.name}</span>
-              <span className="trade-player__meta">
-                {p.pos || '—'}
-                {p.team ? ` · ${p.team}` : ''}
-                {p.ecr != null ? ` · ADP ${Number(p.ecr).toFixed(1)}` : ' · no ADP'}
-              </span>
+              <span className="trade-player__meta">{playerSignals(p) || 'No in-season signals'}</span>
             </div>
             <span className="trade-player__val">{playerTradeValue(p).toFixed(1)}</span>
             <button
@@ -213,7 +239,7 @@ export default function TradeAnalyzer() {
   useEffect(() => {
     let cancelled = false;
     setRankings({ status: 'loading' });
-    fetch('/api/rankings?page_type=sleeper-adp-half', { credentials: 'include' })
+    fetch('/api/trade-values', { credentials: 'include' })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -319,10 +345,12 @@ export default function TradeAnalyzer() {
         if (row) list.push(toTradePlayer(row));
       }
       list.sort((a, b) => {
+        const dv = playerTradeValue(b) - playerTradeValue(a);
+        if (dv !== 0) return dv;
         const ae = Number(a.ecr);
         const be = Number(b.ecr);
         if (Number.isFinite(ae) && Number.isFinite(be) && ae !== be) return ae - be;
-        return playerTradeValue(b) - playerTradeValue(a);
+        return String(a.name || '').localeCompare(String(b.name || ''));
       });
       out.set(ownerId, list);
     }
@@ -453,27 +481,20 @@ export default function TradeAnalyzer() {
   return (
     <div className="page trade-page">
       <header className="page-header">
-        <p className="eyebrow">Half-PPR · Sleeper ADP</p>
+        <p className="eyebrow">Half-PPR · in-season blend</p>
         <h1>Trade analyzer</h1>
         {rankings.status === 'ready' && (
           <p className="trade-source">
-            {rankings.data.season ? (
+            {rankings.data.season ? <>Sleeper {rankings.data.season} Half-PPR</> : 'Sleeper Half-PPR'}
+            {rankings.data.weights
+              ? ` · ${formatWeightSummary(rankings.data.weights, (rankings.data.recent_weeks || []).length)}`
+              : null}
+            {rankings.data.scrape_date ? (
               <>
-                Sleeper {rankings.data.season} Half-PPR ADP
-                {rankings.data.scrape_date ? (
-                  <>
-                    {' '}
-                    · updated <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
-                  </>
-                ) : null}
+                {' '}
+                · updated <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
               </>
-            ) : rankings.data.scrape_date ? (
-              <>
-                ADP as of <strong>{formatScrapeDate(rankings.data.scrape_date)}</strong>
-              </>
-            ) : (
-              'Sleeper Half-PPR ADP'
-            )}
+            ) : null}
             {rosterCtx.status === 'ready' && rosterCtx.season
               ? ` · Rosters from ${rosterCtx.season}`
               : null}
@@ -506,8 +527,10 @@ export default function TradeAnalyzer() {
         <div className="trade-help__body">
           <ol className="trade-help__steps">
             <li>
-              <strong>Player value</strong> — each player is ranked by Sleeper Half-PPR ADP (draft
-              market), then scored with a decay curve so top picks are worth much more than depth.
+              <strong>Player value</strong> — each player is scored from a blend of remaining
+              Half-PPR projection (season total minus points already scored), recent per-game
+              scoring (last 1–3 finished weeks), and draft ADP. ADP starts useful and fades as
+              more weeks land; missing signals are dropped and the rest is renormalized.
             </li>
             <li>
               <strong>Fair deal?</strong> — we add up both sides. If the totals are close, it&apos;s
@@ -516,12 +539,12 @@ export default function TradeAnalyzer() {
             </li>
             <li>
               <strong>Starter upgrade</strong> — we rebuild each team&apos;s best lineup (QB, RBs,
-              WRs, TE, FLEX, DST) before and after the trade using those market values. Green means
+              WRs, TE, FLEX, DST) before and after the trade using those blended values. Green means
               your starters got better.
             </li>
             <li>
               <strong>Trade finder</strong> — scans simple swaps across the league and keeps deals
-              that look fair on ADP value <em>and</em> help at least one starting lineup.
+              that look fair on blended value <em>and</em> help at least one starting lineup.
             </li>
           </ol>
           <p className="muted trade-help__note">
@@ -539,7 +562,7 @@ export default function TradeAnalyzer() {
 
       {error && (
         <div className="card" role="alert">
-          <p>Could not load rankings: {rankings.message}</p>
+          <p>Could not load trade values: {rankings.message}</p>
         </div>
       )}
 
@@ -574,7 +597,7 @@ export default function TradeAnalyzer() {
                   {labelA} starter holes: <strong>{needsPreview.join(', ')}</strong>
                 </p>
               ) : managerA ? (
-                <p className="muted trade-teams__needs">{labelA} starters look filled on ADP depth.</p>
+                <p className="muted trade-teams__needs">{labelA} starters look filled on blended depth.</p>
               ) : null}
             </div>
           )}
@@ -792,8 +815,8 @@ export default function TradeAnalyzer() {
                     Trade finder
                   </h2>
                   <p className="muted trade-finder__sub">
-                    Scans 1-for-1 and simple 2-for-1 packages for fair ADP deals that improve
-                    starters. Optionally filter for a position you want to receive.
+                    Scans 1-for-1 and simple 2-for-1 packages for fair blended-value deals that
+                    improve starters. Optionally filter for a position you want to receive.
                   </p>
                 </div>
               </header>
@@ -846,8 +869,8 @@ export default function TradeAnalyzer() {
               {finderRan && suggestions.length === 0 && (
                 <p className="muted">
                   {finderPos
-                    ? `No fair ${finderPos} deals that improve starters within a slight ADP edge.`
-                    : 'No mutual upgrades that stay within a slight ADP edge.'}
+                    ? `No fair ${finderPos} deals that improve starters within a slight value edge.`
+                    : 'No mutual upgrades that stay within a slight value edge.'}
                 </p>
               )}
 
