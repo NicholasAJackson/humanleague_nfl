@@ -24,9 +24,12 @@ function readStoredGuest() {
     const parsed = JSON.parse(raw);
     const leagueId = normalizeLeagueIdInput(parsed?.leagueId);
     if (!leagueId) return null;
+    const ownerId =
+      typeof parsed.ownerId === 'string' && parsed.ownerId.trim() ? String(parsed.ownerId).trim() : null;
     return {
       leagueId,
       leagueName: typeof parsed.leagueName === 'string' ? parsed.leagueName : null,
+      ownerId,
     };
   } catch {
     return null;
@@ -43,6 +46,7 @@ function writeStoredGuest(guest) {
     JSON.stringify({
       leagueId: guest.leagueId,
       leagueName: guest.leagueName || null,
+      ownerId: guest.ownerId || null,
     }),
   );
 }
@@ -59,7 +63,7 @@ export function LeagueProvider({ children }) {
   const enterGuestLeague = useCallback(
     async (rawId) => {
       if (!canAccessGuestBrowse(user, devBypass, { hasRealSession })) {
-        throw new Error('Browse another league is available to commissioners only.');
+        throw new Error('Browse another league is not available right now.');
       }
       const leagueId = normalizeLeagueIdInput(rawId);
       if (!leagueId) {
@@ -69,9 +73,13 @@ export function LeagueProvider({ children }) {
       if (!league || league.league_id == null) {
         throw new Error('That league was not found on Sleeper.');
       }
+      const prev = readStoredGuest();
+      const prevOwner =
+        prev?.leagueId === String(league.league_id) && prev?.ownerId ? prev.ownerId : null;
       const next = {
         leagueId: String(league.league_id),
         leagueName: typeof league.name === 'string' && league.name.trim() ? league.name.trim() : null,
+        ownerId: prevOwner,
       };
       writeStoredGuest(next);
       setGuest(next);
@@ -79,6 +87,18 @@ export function LeagueProvider({ children }) {
     },
     [user, devBypass, hasRealSession],
   );
+
+  const setGuestOwnerId = useCallback((ownerId) => {
+    setGuest((prev) => {
+      if (!prev?.leagueId) return prev;
+      const next = {
+        ...prev,
+        ownerId: ownerId ? String(ownerId) : null,
+      };
+      writeStoredGuest(next);
+      return next;
+    });
+  }, []);
 
   const exitGuestLeague = useCallback(() => {
     writeStoredGuest(null);
@@ -97,6 +117,7 @@ export function LeagueProvider({ children }) {
   const isGuest = Boolean(guest?.leagueId) && guestBrowseAllowed;
   const leagueId = isGuest ? guest.leagueId : config.leagueId;
   const guestLeagueName = isGuest ? guest.leagueName : null;
+  const guestOwnerId = isGuest ? guest.ownerId || null : null;
 
   const value = useMemo(
     () => ({
@@ -105,11 +126,22 @@ export function LeagueProvider({ children }) {
       /** True when browsing the configured Human League (not a pasted guest id). */
       isHumanLeague: !isGuest,
       guestLeagueName,
+      guestOwnerId,
       guestBrowseAllowed,
       enterGuestLeague,
+      setGuestOwnerId,
       exitGuestLeague,
     }),
-    [leagueId, isGuest, guestLeagueName, guestBrowseAllowed, enterGuestLeague, exitGuestLeague],
+    [
+      leagueId,
+      isGuest,
+      guestLeagueName,
+      guestOwnerId,
+      guestBrowseAllowed,
+      enterGuestLeague,
+      setGuestOwnerId,
+      exitGuestLeague,
+    ],
   );
 
   return <LeagueContext.Provider value={value}>{children}</LeagueContext.Provider>;

@@ -60,9 +60,36 @@ describe('findWaiverUpgrades', () => {
       rosterPlayers: roster,
       freeAgents: [p(99, 'Wire TE', 'TE', 15), p(98, 'Wire WR', 'WR', 50)],
     });
-    assert.equal(upgrades[0].player.sleeper_id, '99');
-    assert.equal(upgrades[0].fillsNeed, true);
-    assert.ok(upgrades.some((u) => u.player.sleeper_id === '98' && u.upgrade > upgrades[0].upgrade));
+    const te = upgrades.find((u) => u.player.sleeper_id === '99');
+    assert.ok(te && te.fillsNeed);
+    assert.ok(upgrades.some((u) => u.player.sleeper_id === '98' && u.upgrade > te.upgrade));
+  });
+
+  it('keeps up to 3 upgrades per position (no global cap)', () => {
+    const roster = [
+      p(1, 'QB', 'QB', 20),
+      p(2, 'RB1', 'RB', 20),
+      p(3, 'RB2', 'RB', 18),
+      p(4, 'WR1', 'WR', 20),
+      p(5, 'WR2', 'WR', 18),
+      p(6, 'TE', 'TE', 15),
+      p(7, 'DST', 'DST', 10),
+      p(8, 'FLEX WR', 'WR', 12),
+      p(9, 'FLEX2 WR', 'WR', 11),
+    ];
+    const freeAgents = [];
+    for (let i = 0; i < 5; i++) {
+      freeAgents.push(p(100 + i, `RB${i}`, 'RB', 90 - i));
+      freeAgents.push(p(200 + i, `WR${i}`, 'WR', 90 - i));
+      freeAgents.push(p(300 + i, `QB${i}`, 'QB', 80 - i));
+    }
+    const { upgrades, byPos } = findWaiverUpgrades({ rosterPlayers: roster, freeAgents });
+    assert.equal(byPos.RB.length, 3);
+    assert.equal(byPos.WR.length, 3);
+    assert.equal(byPos.QB.length, 3);
+    assert.ok(upgrades.length >= 9);
+    assert.equal(byPos.RB[0].player.sleeper_id, '100');
+    assert.equal(byPos.RB[2].player.sleeper_id, '102');
   });
 });
 

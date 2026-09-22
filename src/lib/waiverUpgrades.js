@@ -10,11 +10,14 @@ import {
 
 const SKILL = new Set(['QB', 'RB', 'WR', 'TE', 'DST']);
 
+/** Display / fill order for per-position waiver targets. */
+export const WAIVER_POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST'];
+
 const DEFAULTS = {
   minUpgrade: 0.4,
-  maxResults: 8,
+  /** Max lineup-improving adds retained per skill position. */
   maxPerPos: 3,
-  maxCandidates: 80,
+  maxCandidates: 120,
 };
 
 function round1(n) {
@@ -63,11 +66,12 @@ export function valuedPlayerFromSources(id, blendById, lookup) {
 
 /**
  * Free agents whose add would raise the optimal starter lineup.
+ * Returns up to {@link DEFAULTS.maxPerPos} targets per skill position (QB/RB/WR/TE/DST).
  *
  * @param {object} args
  * @param {object[]} args.rosterPlayers — valued players currently on the team
  * @param {object[]} args.freeAgents — unowned valued players
- * @returns {{ beforeTotal: number, holes: string[], upgrades: object[] }}
+ * @returns {{ beforeTotal: number, holes: string[], upgrades: object[], byPos: Record<string, object[]> }}
  */
 export function findWaiverUpgrades({ rosterPlayers, freeAgents, opts = {} }) {
   const conf = { ...DEFAULTS, ...opts };
@@ -103,19 +107,20 @@ export function findWaiverUpgrades({ rosterPlayers, freeAgents, opts = {} }) {
     return b.upgrade - a.upgrade;
   });
 
-  const usedPos = {};
-  const upgrades = [];
+  const byPos = Object.fromEntries(WAIVER_POS_ORDER.map((pos) => [pos, []]));
   for (const h of hits) {
     const pos = normalizeDraftPos(h.player.pos);
-    usedPos[pos] = (usedPos[pos] || 0) + 1;
-    if (usedPos[pos] > conf.maxPerPos) continue;
-    upgrades.push(h);
-    if (upgrades.length >= conf.maxResults) break;
+    if (!byPos[pos]) continue;
+    if (byPos[pos].length >= conf.maxPerPos) continue;
+    byPos[pos].push(h);
   }
+
+  const upgrades = WAIVER_POS_ORDER.flatMap((pos) => byPos[pos]);
 
   return {
     beforeTotal: before.total,
     holes: needHoleLabels(needs),
     upgrades,
+    byPos,
   };
 }

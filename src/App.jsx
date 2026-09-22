@@ -202,14 +202,7 @@ export default function App() {
                     </TradeAnalyzerOnly>
                   }
                 />
-                <Route
-                  path="/me"
-                  element={
-                    <MembersOnly>
-                      <MyTeam />
-                    </MembersOnly>
-                  }
-                />
+                <Route path="/me" element={<MyTeam />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Route>

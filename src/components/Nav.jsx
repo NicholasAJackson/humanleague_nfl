@@ -31,12 +31,15 @@ const memberOverflowItems = [
 
 const guestPrimaryItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
-  { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
+  { to: '/me', label: 'My team', icon: MyTeamIcon },
   { to: '/stats', label: 'Stats', icon: StatsIcon },
   { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
 ];
 
-const guestOverflowItems = [{ to: '/drafts', label: 'Draft', icon: DraftIcon }];
+const guestOverflowItems = [
+  { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
+  { to: '/drafts', label: 'Draft', icon: DraftIcon },
+];
 
 function itemVisible(item, user, devBypass, isGuest) {
   if (item.requires === 'mockDraft') return canAccessMockDraft(user, devBypass, isGuest);
@@ -87,8 +90,9 @@ export default function Nav() {
   }
 
   function onExitGuest() {
-    exitGuestLeague();
-    navigate(hasRealSession ? '/' : '/login', { replace: true });
+    // Keep the current guest league so /login can prefill and switch; clear via
+    // sign-in or “Back to Human League” on the login screen.
+    navigate('/login', { replace: true });
   }
 
   const navExtra = showLogout || showExitGuest || showBrowse;
@@ -140,8 +144,8 @@ export default function Nav() {
         {showExitGuest && (
           <li>
             <button type="button" className="tab tab-logout" onClick={onExitGuest}>
-              <LogoutIcon />
-              <span>Exit</span>
+              <BrowseIcon />
+              <span>League</span>
             </button>
           </li>
         )}

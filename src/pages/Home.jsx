@@ -66,7 +66,7 @@ function DraftCountdown() {
 
 export default function Home() {
   const { ready, authenticated, authEnabled, user, devBypass } = useAuth();
-  const { leagueId, isGuest, isHumanLeague, guestLeagueName } = useLeague();
+  const { leagueId, isGuest, isHumanLeague, guestLeagueName, guestOwnerId } = useLeague();
   const [welcomeTeamName, setWelcomeTeamName] = useState(null);
   const [league, setLeague] = useState(null);
   const [hof, setHof] = useState({ status: 'idle' });
@@ -144,7 +144,7 @@ export default function Home() {
               </span>
             ) : (
               <span className="home-hero__intro-lead">
-                Browsing this Sleeper league — stats, drafts, rankings, and trades.
+                Browsing this Sleeper league — stats, trades, and My Team waiver pickups.
               </span>
             )}
           </p>
@@ -159,7 +159,10 @@ export default function Home() {
 
       {!leagueId && <NoConfig />}
       {leagueId ? (
-        <NflMatchups leagueId={leagueId} viewerOwnerId={user?.sleeperUserId} />
+        <NflMatchups
+          leagueId={leagueId}
+          viewerOwnerId={isGuest ? guestOwnerId || undefined : user?.sleeperUserId}
+        />
       ) : null}
       {leagueId && hof.status === 'loading' && (
         <div className="card" aria-busy="true">
@@ -203,6 +206,12 @@ export default function Home() {
         />
         {isGuest && (
           <>
+            <FeatureLink
+              to="/me"
+              icon={MyTeamIcon}
+              title="My team"
+              body="Pick your roster and see waiver pickup upgrades."
+            />
             <FeatureLink
               to="/drafts"
               icon={DraftIcon}
@@ -501,6 +510,25 @@ function TradeIcon() {
       <path d="M8 21H3v-5" />
       <path d="M21 3l-7 7" />
       <path d="M3 21l7-7" />
+    </svg>
+  );
+}
+
+function MyTeamIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="8" r="4" />
+      <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
     </svg>
   );
 }

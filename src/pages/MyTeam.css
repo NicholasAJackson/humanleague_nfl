@@ -331,6 +331,33 @@
   font-size: var(--fs-sm);
 }
 
+.my-team-waivers-by-pos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.my-team-waivers-pos-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.my-team-waivers-pos-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.my-team-waivers-pos-title .muted {
+  font-weight: 500;
+  font-size: var(--fs-xs);
+}
+
 .my-team-keepers-card .muted {
   margin-top: var(--space-2);
 }
@@ -347,4 +374,49 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.my-team-pick-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.my-team-pick-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.my-team-pick-field label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.my-team-pick-field select,
+.my-team-guest-switch select {
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface, rgba(15, 23, 42, 0.65));
+  color: var(--color-text);
+  font: inherit;
+}
+
+.my-team-guest-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: -4px;
+}
+
+.my-team-guest-switch label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--color-text-dim);
 }

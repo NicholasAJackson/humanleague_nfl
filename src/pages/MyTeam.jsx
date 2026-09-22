@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { config, leagueFormat, canAccessKeepers, canAccessTradeAnalyzer } from '../config.js';
+import { canAccessKeepers, canAccessTradeAnalyzer, isConfigured, leagueFormat } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
+import { useLeague } from '../LeagueContext.jsx';
 import BottomSheet from '../components/BottomSheet.jsx';
 import {
   resolveLeagueHistoryChain,
   fetchSeasonBundle,
+  fetchUsers,
   getNflPlayersLookup,
   rosterPlayerIds,
 } from '../lib/sleeper.js';
@@ -13,7 +15,7 @@ import { computeStats, getRegularSeasonMatchupPairs } from '../lib/stats.js';
 import { loadKeeperRankingsContext } from '../lib/loadKeeperRankingsContext.js';
 import { rosterPlayerIdSet } from '../lib/keeperRankings.js';
 import { formatWeightSummary } from '../lib/tradeBlend.js';
-import { findWaiverUpgrades, valuedPlayerFromSources } from '../lib/waiverUpgrades.js';
+import { findWaiverUpgrades, valuedPlayerFromSources, WAIVER_POS_ORDER } from '../lib/waiverUpgrades.js';
 import './MyTeam.css';
 
 function fmtNominationRow(n, lookup) {
@@ -270,10 +272,11 @@ function nextRegularOpponent(bundle, rosterId, playedWeeksDesc) {
 }
 
 async function loadSeasonForOwner(chain, ownerId) {
+  const want = String(ownerId);
   for (const meta of chain) {
     try {
       const bundle = await fetchSeasonBundle(meta.leagueId);
-      const roster = bundle.rosters?.find((r) => r.owner_id === ownerId);
+      const roster = bundle.rosters?.find((r) => r.owner_id != null && String(r.owner_id) === want);
       const ids = roster ? rosterPlayerIds(roster) : [];
       if (roster && ids.length > 0) {
         return { meta, bundle, roster };
@@ -420,12 +423,20 @@ function WaiverUpgradesCard({ blend, lookup, roster, rosters, showTradeLink, onV
       ? formatWeightSummary(blend.data.weights, (blend.data.recent_weeks || []).length)
       : '';
 
+  const posSections = useMemo(() => {
+    if (!result?.byPos) return [];
+    return WAIVER_POS_ORDER.filter((pos) => (result.byPos[pos] || []).length > 0).map((pos) => ({
+      pos,
+      rows: result.byPos[pos],
+    }));
+  }, [result]);
+
   return (
     <section className="card my-team-waivers-card">
       <h2>Waiver upgrades</h2>
       <p className="muted my-team-roster-hint">
-        Unowned players who would raise your optimal starter lineup on in-season trade value (same
-        blend as the Trade analyzer). Adds only — no drop required for the delta.
+        Top 3 unowned targets per position who would raise your optimal starter lineup on in-season
+        trade value (same blend as the Trade analyzer). Adds only — no drop required for the delta.
         {weightLine ? ` ${weightLine}.` : ''}
       </p>
 
@@ -450,53 +461,56 @@ function WaiverUpgradesCard({ blend, lookup, roster, rosters, showTradeLink, onV
       {blend.status === 'ready' && result && result.upgrades.length === 0 && (
         <p className="muted">No unowned players would raise your starting lineup on current values.</p>
       )}
-      {blend.status === 'ready' && result && result.upgrades.length > 0 && (
-        <div className="my-team-roster-scroll">
-          <table className="my-team-roster my-team-waivers-table">
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th>Pos</th>
-                <th>Slot</th>
-                <th>Upgrade</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.upgrades.map((u) => {
-                const id = String(u.player.sleeper_id);
-                const pos = u.player.pos || '—';
-                const name = u.player.name || id;
-                return (
-                  <tr key={id}>
-                    <td>
-                      {onViewPlayer ? (
-                        <button
-                          type="button"
-                          className="my-team-roster__player-hit"
-                          onClick={() => onViewPlayer(id)}
-                          aria-label={`Rankings for ${name}`}
-                        >
-                          {name}
-                        </button>
-                      ) : (
-                        name
-                      )}
-                      {u.fillsNeed ? (
-                        <span className="my-team-waivers-need">Fills hole</span>
-                      ) : null}
-                    </td>
-                    <td>
-                      <span className={`my-team-pos my-team-pos--${String(pos).toLowerCase()}`}>
-                        {pos}
-                      </span>
-                    </td>
-                    <td>{u.slot}</td>
-                    <td className="my-team-waivers-delta">{fmtWaiverUpgrade(u.upgrade)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {blend.status === 'ready' && posSections.length > 0 && (
+        <div className="my-team-waivers-by-pos">
+          {posSections.map(({ pos, rows }) => (
+            <div key={pos} className="my-team-waivers-pos-block">
+              <h3 className="my-team-waivers-pos-title">
+                <span className={`my-team-pos my-team-pos--${pos.toLowerCase()}`}>{pos}</span>
+                <span className="muted">Top {rows.length}</span>
+              </h3>
+              <div className="my-team-roster-scroll">
+                <table className="my-team-roster my-team-waivers-table">
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Slot</th>
+                      <th>Upgrade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((u) => {
+                      const id = String(u.player.sleeper_id);
+                      const name = u.player.name || id;
+                      return (
+                        <tr key={id}>
+                          <td>
+                            {onViewPlayer ? (
+                              <button
+                                type="button"
+                                className="my-team-roster__player-hit"
+                                onClick={() => onViewPlayer(id)}
+                                aria-label={`Rankings for ${name}`}
+                              >
+                                {name}
+                              </button>
+                            ) : (
+                              name
+                            )}
+                            {u.fillsNeed ? (
+                              <span className="my-team-waivers-need">Fills hole</span>
+                            ) : null}
+                          </td>
+                          <td>{u.slot}</td>
+                          <td className="my-team-waivers-delta">{fmtWaiverUpgrade(u.upgrade)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
       {showTradeLink ? (
@@ -508,13 +522,27 @@ function WaiverUpgradesCard({ blend, lookup, roster, rosters, showTradeLink, onV
   );
 }
 
+function managerOptions(users) {
+  if (!Array.isArray(users)) return [];
+  return users
+    .filter((u) => u.user_id)
+    .map((u) => ({
+      id: String(u.user_id),
+      label: String(u.metadata?.team_name || u.display_name || u.user_id).trim() || String(u.user_id),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export default function MyTeam() {
   const { ready, authenticated, authEnabled, devBypass, user } = useAuth();
+  const { leagueId, isGuest, guestOwnerId, setGuestOwnerId } = useLeague();
   const [searchParams] = useSearchParams();
   const commissionerAs =
-    authEnabled && user?.role === 'commissioner' ? searchParams.get('user')?.trim() || '' : '';
+    !isGuest && authEnabled && user?.role === 'commissioner'
+      ? searchParams.get('user')?.trim() || ''
+      : '';
 
-  const effectiveOwnerId = commissionerAs || user?.sleeperUserId || '';
+  const effectiveOwnerId = commissionerAs || (isGuest ? guestOwnerId || '' : user?.sleeperUserId || '');
 
   const [lookup, setLookup] = useState(null);
   const [state, setState] = useState({ status: 'idle' });
@@ -523,6 +551,10 @@ export default function MyTeam() {
   const [ecrRankings, setEcrRankings] = useState({ status: 'idle' });
   const [blendRankings, setBlendRankings] = useState({ status: 'idle' });
   const [keeperCtx, setKeeperCtx] = useState({ status: 'idle' });
+  const [teamChoices, setTeamChoices] = useState({ status: 'idle', options: [] });
+
+  /** Member session or guest browse — both can load public rankings + Sleeper rosters. */
+  const canLoadTeam = Boolean(ready && ((isGuest && isConfigured(leagueId)) || (authenticated && !devBypass)));
 
   useEffect(() => {
     let cancelled = false;
@@ -534,9 +566,36 @@ export default function MyTeam() {
     };
   }, []);
 
+  // Guest: load managers so they can pick which roster is "mine".
+  useEffect(() => {
+    if (!isGuest || !isConfigured(leagueId)) {
+      setTeamChoices({ status: 'idle', options: [] });
+      return;
+    }
+    let cancelled = false;
+    setTeamChoices({ status: 'loading', options: [] });
+    fetchUsers(leagueId)
+      .then((users) => {
+        if (cancelled) return;
+        setTeamChoices({ status: 'ready', options: managerOptions(users) });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTeamChoices({
+            status: 'error',
+            options: [],
+            message: err?.message || 'Could not load managers',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, leagueId]);
+
   useEffect(() => {
     let cancelled = false;
-    if (!ready || !authenticated || devBypass) {
+    if (!canLoadTeam) {
       setEcrRankings({ status: 'idle' });
       return;
     }
@@ -557,11 +616,11 @@ export default function MyTeam() {
     return () => {
       cancelled = true;
     };
-  }, [ready, authenticated, devBypass]);
+  }, [canLoadTeam]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!ready || !authenticated || devBypass) {
+    if (!canLoadTeam) {
       setBlendRankings({ status: 'idle' });
       return;
     }
@@ -582,13 +641,14 @@ export default function MyTeam() {
     return () => {
       cancelled = true;
     };
-  }, [ready, authenticated, devBypass]);
+  }, [canLoadTeam]);
 
   const ecrReadyData = ecrRankings.status === 'ready' ? ecrRankings.data : null;
 
   useEffect(() => {
     let cancelled = false;
-    if (!ready || !authenticated || devBypass) {
+    // Keeper draft-vs-consensus stays Human League–scoped for members only.
+    if (!canLoadTeam || isGuest) {
       setKeeperCtx({ status: 'idle' });
       return;
     }
@@ -611,7 +671,7 @@ export default function MyTeam() {
     return () => {
       cancelled = true;
     };
-  }, [ready, authenticated, devBypass, ecrRankings.status, ecrReadyData]);
+  }, [canLoadTeam, isGuest, ecrRankings.status, ecrReadyData]);
 
   const ecrBySleeper = useMemo(() => {
     if (ecrRankings.status !== 'ready') return null;
@@ -637,18 +697,18 @@ export default function MyTeam() {
     rankingsFocusId != null && keeperBySleeper ? keeperBySleeper.get(String(rankingsFocusId)) : null;
 
   const load = useCallback(async () => {
-    if (!config.leagueId) {
+    if (!isConfigured(leagueId)) {
       setState({ status: 'no-config' });
       return;
     }
     if (!effectiveOwnerId) {
-      setState({ status: 'needs-member' });
+      setState({ status: isGuest ? 'needs-pick' : 'needs-member' });
       return;
     }
 
     setState({ status: 'loading' });
     try {
-      const chain = await resolveLeagueHistoryChain(config.leagueId);
+      const chain = await resolveLeagueHistoryChain(leagueId);
       if (!chain.length) {
         setState({ status: 'error', message: 'No linked league seasons found.' });
         return;
@@ -660,7 +720,7 @@ export default function MyTeam() {
       }
 
       const stats = computeStats(hit.bundle);
-      const team = stats.teams.find((t) => t.ownerId === effectiveOwnerId);
+      const team = stats.teams.find((t) => String(t.ownerId) === String(effectiveOwnerId));
       const rosterId = hit.roster.roster_id;
       const rank =
         team != null ? stats.standings.findIndex((t) => t.rosterId === team.rosterId) + 1 : null;
@@ -704,15 +764,18 @@ export default function MyTeam() {
     } catch (e) {
       setState({ status: 'error', message: e.message || String(e) });
     }
-  }, [effectiveOwnerId]);
+  }, [effectiveOwnerId, leagueId, isGuest]);
 
   useEffect(() => {
-    if (!ready || !authenticated || devBypass) return;
+    if (!canLoadTeam) return;
     load();
-  }, [ready, authenticated, devBypass, load]);
+  }, [canLoadTeam, load]);
 
   useEffect(() => {
-    if (!ready || !authenticated || devBypass) return;
+    if (!canLoadTeam || isGuest) {
+      setNominations([]);
+      return;
+    }
     let cancelled = false;
     fetch('/api/keeper-nominations', { credentials: 'include' })
       .then(async (res) => {
@@ -729,7 +792,7 @@ export default function MyTeam() {
     return () => {
       cancelled = true;
     };
-  }, [ready, authenticated, devBypass]);
+  }, [canLoadTeam, isGuest]);
 
   const seasonLabel = state.status === 'ready' ? String(state.meta.season) : '';
   const myNominations = useMemo(() => {
@@ -745,6 +808,11 @@ export default function MyTeam() {
   const myLatestAny = useMemo(() => myNominations[0] || null, [myNominations]);
   const myLatest = myLatestForSeason || myLatestAny;
 
+  function onPickGuestTeam(e) {
+    const id = e.target.value;
+    setGuestOwnerId(id || null);
+  }
+
   if (!ready) {
     return (
       <div className="page my-team-page">
@@ -754,7 +822,7 @@ export default function MyTeam() {
     );
   }
 
-  if (!authEnabled || devBypass) {
+  if (!isGuest && (!authEnabled || devBypass)) {
     return (
       <div className="page my-team-page">
         <p className="muted">Turn on app login to use My team.</p>
@@ -762,12 +830,55 @@ export default function MyTeam() {
     );
   }
 
-  if (!authenticated) {
+  if (!isGuest && !authenticated) {
     return (
       <div className="page my-team-page">
         <p className="muted">
           <Link to="/login">Sign in</Link> to see your roster.
         </p>
+      </div>
+    );
+  }
+
+  if (state.status === 'needs-pick' || (isGuest && !effectiveOwnerId)) {
+    return (
+      <div className="page my-team-page">
+        <header className="page-header">
+          <span className="eyebrow">Your roster</span>
+          <h1>My team</h1>
+        </header>
+        <div className="card my-team-pick-card">
+          <p className="muted" style={{ margin: 0 }}>
+            Choose your team in this league to see your roster and waiver pickup values.
+          </p>
+          {teamChoices.status === 'loading' || teamChoices.status === 'idle' ? (
+            <p className="muted" style={{ marginTop: 12 }}>
+              Loading managers…
+            </p>
+          ) : null}
+          {teamChoices.status === 'error' ? (
+            <p className="muted" role="alert" style={{ marginTop: 12 }}>
+              {teamChoices.message}
+            </p>
+          ) : null}
+          {teamChoices.status === 'ready' ? (
+            <div className="login-field my-team-pick-field">
+              <label htmlFor="guest-team-pick">Team</label>
+              <select
+                id="guest-team-pick"
+                value={guestOwnerId || ''}
+                onChange={onPickGuestTeam}
+              >
+                <option value="">Select a team…</option>
+                {teamChoices.options.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -798,7 +909,11 @@ export default function MyTeam() {
   if (state.status === 'no-config') {
     return (
       <div className="page my-team-page">
-        <p className="muted">Set VITE_SLEEPER_LEAGUE_ID to load league data.</p>
+        <p className="muted">
+          {isGuest
+            ? 'Paste a Sleeper league ID from the login screen to load a league.'
+            : 'Set VITE_SLEEPER_LEAGUE_ID to load league data.'}
+        </p>
       </div>
     );
   }
@@ -832,9 +947,27 @@ export default function MyTeam() {
         </header>
         <div className="card">
           <p className="muted" style={{ margin: 0 }}>
-            Could not find a linked season where this Sleeper account has players on a roster. If you joined late or the
-            league rolled over, ask the commissioner to verify your Sleeper user id on your login account.
+            {isGuest
+              ? 'Could not find a roster with players for that manager. Pick a different team.'
+              : 'Could not find a linked season where this Sleeper account has players on a roster. If you joined late or the league rolled over, ask the commissioner to verify your Sleeper user id on your login account.'}
           </p>
+          {isGuest ? (
+            <div className="login-field my-team-pick-field" style={{ marginTop: 12 }}>
+              <label htmlFor="guest-team-repick">Team</label>
+              <select
+                id="guest-team-repick"
+                value={guestOwnerId || ''}
+                onChange={onPickGuestTeam}
+              >
+                <option value="">Select a team…</option>
+                {teamChoices.options.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -848,6 +981,23 @@ export default function MyTeam() {
         <span className="eyebrow">Your roster</span>
         <h1>My team</h1>
       </header>
+
+      {isGuest && teamChoices.status === 'ready' ? (
+        <div className="my-team-guest-switch">
+          <label htmlFor="guest-team-switch">Viewing</label>
+          <select
+            id="guest-team-switch"
+            value={guestOwnerId || ''}
+            onChange={onPickGuestTeam}
+          >
+            {teamChoices.options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {commissionerAs && (
         <p className="muted" style={{ margin: '-8px 0 0' }}>
@@ -921,7 +1071,9 @@ export default function MyTeam() {
 
       <section className="card my-team-roster-card">
         <h2>Roster</h2>
-        <p className="muted my-team-roster-hint">Tap a player name for expert / keeper stats (same data as Rankings).</p>
+        <p className="muted my-team-roster-hint">
+          Tap a player name for expert{isGuest ? '' : ' / keeper'} stats (same data as Rankings).
+        </p>
         <RosterTable roster={roster} lookup={lookup} onViewRankings={(id) => setRankingsFocusId(id)} />
       </section>
 
@@ -930,7 +1082,7 @@ export default function MyTeam() {
         lookup={lookup}
         roster={roster}
         rosters={state.bundle?.rosters}
-        showTradeLink={canAccessTradeAnalyzer(user, devBypass)}
+        showTradeLink={canAccessTradeAnalyzer(user, devBypass, isGuest)}
         onViewPlayer={(id) => setRankingsFocusId(id)}
       />
 
@@ -945,33 +1097,36 @@ export default function MyTeam() {
         keeperRow={focusKeeperRow}
       />
 
-      <section className="card my-team-keepers-card">
-        <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Keeper nominations</h2>
-        <p className="muted" style={{ marginTop: 8 }}>
-          Latest submission from the Keepers page (same season when available).
-        </p>
-        {!myLatest && <p className="muted">No nominations saved yet.</p>}
-        {myLatest && (
-          <>
-            {!myLatestForSeason && seasonLabel && (
-              <p className="muted" style={{ fontSize: 13 }}>
-                Nothing on file for <strong>{seasonLabel}</strong> — showing season <strong>{myLatest.source_season}</strong>.
-              </p>
-            )}
-            <p className="my-team-keepers-picks">{fmtNominationRow(myLatest, lookup)}</p>
-            <div className="my-team-keepers-meta">
-              <span>{myLatest.nomination_kind}</span>
-              <span>Season {myLatest.source_season}</span>
-              <span>{myLatest.updated_at ? new Date(myLatest.updated_at).toLocaleString() : ''}</span>
-            </div>
-          </>
-        )}
-        {canAccessKeepers() ? (
-          <p style={{ marginTop: 14 }}>
-            <Link to="/keepers">Edit on Keepers page →</Link>
+      {!isGuest ? (
+        <section className="card my-team-keepers-card">
+          <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Keeper nominations</h2>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Latest submission from the Keepers page (same season when available).
           </p>
-        ) : null}
-      </section>
+          {!myLatest && <p className="muted">No nominations saved yet.</p>}
+          {myLatest && (
+            <>
+              {!myLatestForSeason && seasonLabel && (
+                <p className="muted" style={{ fontSize: 13 }}>
+                  Nothing on file for <strong>{seasonLabel}</strong> — showing season{' '}
+                  <strong>{myLatest.source_season}</strong>.
+                </p>
+              )}
+              <p className="my-team-keepers-picks">{fmtNominationRow(myLatest, lookup)}</p>
+              <div className="my-team-keepers-meta">
+                <span>{myLatest.nomination_kind}</span>
+                <span>Season {myLatest.source_season}</span>
+                <span>{myLatest.updated_at ? new Date(myLatest.updated_at).toLocaleString() : ''}</span>
+              </div>
+            </>
+          )}
+          {canAccessKeepers() ? (
+            <p style={{ marginTop: 14 }}>
+              <Link to="/keepers">Edit on Keepers page →</Link>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

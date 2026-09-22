@@ -140,3 +140,20 @@
   color: var(--color-text-mute);
   line-height: 1.5;
 }
+
+.login-text-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-text-link:hover {
+  color: var(--color-text);
+}

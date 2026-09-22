@@ -37,14 +37,11 @@ function envFlagTrue(name) {
 export const DEV_LOGIN_SCREEN = Boolean(viteEnv.DEV && envFlagTrue('VITE_DEV_LOGIN_SCREEN'));
 
 /**
- * Guest “browse another league” is commissioner tooling (plus local DEV).
- * Managers never see browse UI; anonymous public login stays sign-in only.
+ * Guest browse via a pasted Sleeper league ID — available to everyone on the login screen
+ * (signed-in members, anonymous visitors, and local DEV).
  */
-export function canAccessGuestBrowse(user, devBypass, { hasRealSession } = {}) {
-  if (user?.role === 'commissioner') return true;
-  if (viteEnv.DEV && DEV_LOGIN_SCREEN && !hasRealSession) return true;
-  if (viteEnv.DEV && devBypass) return true;
-  return false;
+export function canAccessGuestBrowse(_user, _devBypass, _opts = {}) {
+  return true;
 }
 
 /** Human League roster/draft shape — used for keeper cost vs consensus view on Rankings. */
@@ -59,9 +56,10 @@ export const leagueFormat = {
 
 /**
  * Guest “browse another league” may use these Sleeper-read routes only.
- * Keepers, rules, My Team, mock draft, and ceremony stay on the auth path.
+ * Keepers, rules, mock draft, and ceremony stay on the Human League auth path.
+ * My Team is allowed so guests can pick a roster and see waiver upgrades.
  */
-export const GUEST_ALLOWED_PATHS = new Set(['/', '/stats', '/drafts', '/rankings', '/trades']);
+export const GUEST_ALLOWED_PATHS = new Set(['/', '/stats', '/drafts', '/rankings', '/trades', '/me']);
 
 export function isGuestAllowedPath(pathname) {
   return GUEST_ALLOWED_PATHS.has(pathname);
@@ -118,9 +116,11 @@ export function canAccessTradeAnalyzer(user, devBypass, isGuest = false) {
   return false;
 }
 
-/** My Team requires a member session bound to a Sleeper user — never guests. */
+/**
+ * My Team: member sessions with a linked Sleeper id, or guest browse (team picker).
+ */
 export function canAccessMyTeam(user, isGuest = false) {
-  if (isGuest) return false;
+  if (isGuest) return true;
   return typeof user?.sleeperUserId === 'string' && user.sleeperUserId.length > 0;
 }
 

@@ -13,7 +13,7 @@ async function fetchAuthConfig() {
 
 export default function Login() {
   const { ready, authenticated, authEnabled, devBypass, user, refresh } = useAuth();
-  const { enterGuestLeague, exitGuestLeague } = useLeague();
+  const { enterGuestLeague, exitGuestLeague, isGuest, leagueId: activeLeagueId } = useLeague();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -37,6 +37,13 @@ export default function Login() {
     };
   }, []);
 
+  // Prefill when changing league while already browsing.
+  useEffect(() => {
+    if (isGuest && activeLeagueId && !guestId) {
+      setGuestId(activeLeagueId);
+    }
+  }, [isGuest, activeLeagueId, guestId]);
+
   const hasRealSession = authenticated && !devBypass;
   const guestOnlyDevScreen = DEV_LOGIN_SCREEN && !authEnabled;
   const showGuestBrowse = canAccessGuestBrowse(user, devBypass, { hasRealSession });
@@ -45,7 +52,7 @@ export default function Login() {
   if (ready && !authEnabled && !DEV_LOGIN_SCREEN) {
     return <Navigate to="/" replace />;
   }
-  // Signed-in managers bounce home; commissioners may stay to paste a league id.
+  // Signed-in users without browse would bounce home; browse is open to everyone.
   if (ready && hasRealSession && !showGuestBrowse) {
     return <Navigate to={from === '/login' ? '/' : from} replace />;
   }
@@ -102,19 +109,27 @@ export default function Login() {
     }
   }
 
+  function onReturnHumanLeague() {
+    exitGuestLeague();
+    navigate('/', { replace: true });
+  }
+
   let lead =
-    'Sign in to open the league hub. If your deployment uses member accounts, use the username your commissioner gave you.';
+    'Sign in to open the Human League hub, or paste any Sleeper league ID to browse stats, trades, and your team’s waiver values.';
   if (guestOnlyDevScreen || (hasRealSession && showGuestBrowse)) {
     lead = hasRealSession
-      ? 'Paste a Sleeper league ID to browse stats, drafts, rankings, and trades for another league.'
+      ? 'Paste a Sleeper league ID to browse stats, drafts, rankings, trades, and My Team (waiver pickups) for another league.'
       : 'Local dev: paste a Sleeper league ID to try guest browse without enabling site auth.';
   } else if (modes) {
     if (userLogin && siteLogin) {
-      lead = '';
+      lead =
+        'Sign in with your member account, or paste a Sleeper league ID below to browse another league.';
     } else if (userLogin) {
-      lead = 'Use the username and password your commissioner set up for you.';
+      lead =
+        'Use the username and password your commissioner set up, or paste a Sleeper league ID to browse another league.';
     } else if (siteLogin) {
-      lead = 'Enter the shared league password your commissioner configured on the host.';
+      lead =
+        'Enter the shared league password, or paste a Sleeper league ID to browse another league.';
     }
   }
 
@@ -129,7 +144,7 @@ export default function Login() {
         </svg>
       </div>
       <header className="page-header">
-        <span className="eyebrow">{browseOnly ? (guestOnlyDevScreen ? 'Local dev' : 'Commissioner') : 'Human League'}</span>
+        <span className="eyebrow">{browseOnly ? (guestOnlyDevScreen ? 'Local dev' : 'Any Sleeper league') : 'Human League'}</span>
         <h1>{browseOnly ? 'Browse a league' : 'Sign in'}</h1>
         <p className="muted login-lead">{lead}</p>
       </header>
@@ -193,10 +208,10 @@ export default function Login() {
       {showGuestBrowse ? (
         <form className="card login-card login-card--guest" onSubmit={onBrowse}>
           <header className="login-guest-header">
-            <h2>{guestOnlyDevScreen ? 'Sleeper league' : 'Browse another league'}</h2>
+            <h2>{guestOnlyDevScreen ? 'Sleeper league' : 'Browse with a league ID'}</h2>
             <p className="muted login-lead">
-              Paste a Sleeper league ID to view stats, drafts, rankings, and trades. Human League
-              keepers, rules, and My Team stay on the member app.
+              Paste a Sleeper league ID for league stats, the trade analyzer, and My Team waiver
+              pickup values. Human League keepers and rules stay on the member app.
             </p>
           </header>
 
@@ -227,18 +242,22 @@ export default function Login() {
             className="btn login-submit login-submit--guest"
             disabled={submitting || guestSubmitting}
           >
-            {guestSubmitting ? 'Loading league…' : 'Browse league'}
+            {guestSubmitting ? 'Loading league…' : isGuest ? 'Switch league' : 'Browse league'}
           </button>
         </form>
       ) : null}
 
-      {showSignIn ? (
-        <p className="login-foot">Forgetting passwords will be publically shamed.</p>
-      ) : showGuestBrowse ? (
+      {hasRealSession ? (
         <p className="login-foot">
-          {guestOnlyDevScreen
-            ? 'Tip: open /login anytime, or use Browse in the nav. Restart Vite after changing env.'
-            : 'Exit browse from the nav to return to Human League.'}
+          <button type="button" className="login-text-link" onClick={onReturnHumanLeague}>
+            Back to Human League
+          </button>
+        </p>
+      ) : showSignIn ? (
+        <p className="login-foot">Forgetting passwords will be publically shamed.</p>
+      ) : guestOnlyDevScreen ? (
+        <p className="login-foot">
+          Tip: open /login anytime, or use Change league in the nav. Restart Vite after changing env.
         </p>
       ) : null}
     </div>
