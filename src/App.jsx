@@ -23,6 +23,7 @@ const KeeperCeremony = lazy(() => import('./pages/KeeperCeremony.jsx'));
 const Rankings = lazy(() => import('./pages/Rankings.jsx'));
 const TradeAnalyzer = lazy(() => import('./pages/TradeAnalyzer.jsx'));
 const MyTeam = lazy(() => import('./pages/MyTeam.jsx'));
+const Targets = lazy(() => import('./pages/Targets.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 
 function PageFallback() {
@@ -203,6 +204,7 @@ export default function App() {
                   }
                 />
                 <Route path="/me" element={<MyTeam />} />
+                <Route path="/targets" element={<Targets />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Route>

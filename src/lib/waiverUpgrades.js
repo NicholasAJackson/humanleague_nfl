@@ -10,14 +10,16 @@ import {
 
 const SKILL = new Set(['QB', 'RB', 'WR', 'TE', 'DST']);
 
-/** Display / fill order for per-position waiver targets. */
-export const WAIVER_POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST'];
+/**
+ * Display order: skill positions plus FLEX (RB/WR flex targets).
+ * Always try to fill {@link DEFAULTS.maxPerPos} rows for each.
+ */
+export const WAIVER_POS_ORDER = ['QB', 'RB', 'WR', 'FLEX', 'TE', 'DST'];
 
 const DEFAULTS = {
-  minUpgrade: 0.4,
-  /** Max lineup-improving adds retained per skill position. */
+  /** Always list this many targets per position when the wire has enough players. */
   maxPerPos: 3,
-  maxCandidates: 120,
+  maxCandidates: 200,
 };
 
 function round1(n) {
@@ -64,16 +66,33 @@ export function valuedPlayerFromSources(id, blendById, lookup) {
   };
 }
 
+function scoreAdd(rosterPlayers, fa, before, needs) {
+  const afterRoster = applyTradeToRoster(rosterPlayers, [fa], []);
+  const after = optimalStarterLineup(afterRoster);
+  const upgrade = round1(after.total - before.total);
+  const slot = slotForPlayer(after.bySlot, fa.sleeper_id);
+  return {
+    player: fa,
+    upgrade,
+    slot: slot || normalizeDraftPos(fa.pos) || '—',
+    fillsNeed: positionFillsStarterNeed(fa.pos, needs),
+    beforeTotal: before.total,
+    afterTotal: after.total,
+    value: playerTradeValue(fa),
+  };
+}
+
 /**
- * Free agents whose add would raise the optimal starter lineup.
- * Returns up to {@link DEFAULTS.maxPerPos} targets per skill position (QB/RB/WR/TE/DST).
+ * Top waiver targets per position for a roster.
+ * Always returns up to {@link DEFAULTS.maxPerPos} free agents per skill position
+ * (by in-season value), plus a FLEX bucket of top RB/WR adds ranked by lineup upgrade.
  *
  * @param {object} args
  * @param {object[]} args.rosterPlayers — valued players currently on the team
  * @param {object[]} args.freeAgents — unowned valued players
  * @returns {{ beforeTotal: number, holes: string[], upgrades: object[], byPos: Record<string, object[]> }}
  */
-export function findWaiverUpgrades({ rosterPlayers, freeAgents, opts = {} }) {
+export function findWaiverTargets({ rosterPlayers, freeAgents, opts = {} }) {
   const conf = { ...DEFAULTS, ...opts };
   const before = optimalStarterLineup(rosterPlayers);
   const needs = rosterStarterNeeds(rosterPlayers);
@@ -81,39 +100,28 @@ export function findWaiverUpgrades({ rosterPlayers, freeAgents, opts = {} }) {
   const candidates = [...(freeAgents || [])]
     .filter((p) => p && p.sleeper_id && playerTradeValue(p) > 0)
     .filter((p) => SKILL.has(normalizeDraftPos(p.pos)))
-    .sort((a, b) => playerTradeValue(b) - playerTradeValue(a))
-    .slice(0, conf.maxCandidates);
-
-  const hits = [];
-  for (const fa of candidates) {
-    const afterRoster = applyTradeToRoster(rosterPlayers, [fa], []);
-    const after = optimalStarterLineup(afterRoster);
-    const upgrade = round1(after.total - before.total);
-    if (upgrade < conf.minUpgrade) continue;
-    const slot = slotForPlayer(after.bySlot, fa.sleeper_id);
-    if (!slot) continue;
-    hits.push({
-      player: fa,
-      upgrade,
-      slot,
-      fillsNeed: positionFillsStarterNeed(fa.pos, needs),
-      beforeTotal: before.total,
-      afterTotal: after.total,
-    });
-  }
-
-  hits.sort((a, b) => {
-    if (a.fillsNeed !== b.fillsNeed) return a.fillsNeed ? -1 : 1;
-    return b.upgrade - a.upgrade;
-  });
+    .sort((a, b) => playerTradeValue(b) - playerTradeValue(a));
 
   const byPos = Object.fromEntries(WAIVER_POS_ORDER.map((pos) => [pos, []]));
-  for (const h of hits) {
-    const pos = normalizeDraftPos(h.player.pos);
-    if (!byPos[pos]) continue;
-    if (byPos[pos].length >= conf.maxPerPos) continue;
-    byPos[pos].push(h);
+
+  for (const pos of ['QB', 'RB', 'WR', 'TE', 'DST']) {
+    const pool = candidates.filter((p) => normalizeDraftPos(p.pos) === pos).slice(0, conf.maxPerPos);
+    byPos[pos] = pool.map((fa) => scoreAdd(rosterPlayers, fa, before, needs));
   }
+
+  // FLEX targets: RB and WR only, ranked by lineup upgrade then value — always top 3.
+  const flexPool = candidates.filter((p) => {
+    const pos = normalizeDraftPos(p.pos);
+    return pos === 'RB' || pos === 'WR';
+  });
+  const flexScored = flexPool
+    .map((fa) => scoreAdd(rosterPlayers, fa, before, needs))
+    .sort((a, b) => {
+      if (b.upgrade !== a.upgrade) return b.upgrade - a.upgrade;
+      return b.value - a.value;
+    })
+    .slice(0, conf.maxPerPos);
+  byPos.FLEX = flexScored;
 
   const upgrades = WAIVER_POS_ORDER.flatMap((pos) => byPos[pos]);
 
@@ -123,4 +131,9 @@ export function findWaiverUpgrades({ rosterPlayers, freeAgents, opts = {} }) {
     upgrades,
     byPos,
   };
+}
+
+/** @deprecated Prefer {@link findWaiverTargets} — kept for older imports. */
+export function findWaiverUpgrades(args) {
+  return findWaiverTargets(args);
 }

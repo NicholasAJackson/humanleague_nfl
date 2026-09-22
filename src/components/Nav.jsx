@@ -16,11 +16,12 @@ import './Nav.css';
 const memberPrimaryItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
   { to: '/me', label: 'My team', icon: MyTeamIcon },
-  { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
+  { to: '/targets', label: 'Target', icon: TargetIcon },
   { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
 ];
 
 const memberOverflowItems = [
+  { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
   { to: '/stats', label: 'Stats', icon: StatsIcon },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
   { to: '/mock-draft', label: 'Mock draft', icon: DraftIcon, requires: 'mockDraft' },
@@ -32,11 +33,12 @@ const memberOverflowItems = [
 const guestPrimaryItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
   { to: '/me', label: 'My team', icon: MyTeamIcon },
-  { to: '/stats', label: 'Stats', icon: StatsIcon },
+  { to: '/targets', label: 'Target', icon: TargetIcon },
   { to: '/trades', label: 'Trades', icon: TradeIcon, requires: 'trades' },
 ];
 
 const guestOverflowItems = [
+  { to: '/stats', label: 'Stats', icon: StatsIcon },
   { to: '/rankings', label: 'Rankings', icon: RankingsIcon },
   { to: '/drafts', label: 'Draft', icon: DraftIcon },
 ];
@@ -218,6 +220,16 @@ function MyTeamIcon() {
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="8" r="4" />
       <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+    </svg>
+  );
+}
+
+function TargetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
     </svg>
   );
 }

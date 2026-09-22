@@ -115,10 +115,10 @@ export default function Login() {
   }
 
   let lead =
-    'Sign in to open the Human League hub, or paste any Sleeper league ID to browse stats, trades, and your team’s waiver values.';
+    'Sign in to open the Human League hub, or paste any Sleeper league ID to browse stats, trades, and Target waiver pickups.';
   if (guestOnlyDevScreen || (hasRealSession && showGuestBrowse)) {
     lead = hasRealSession
-      ? 'Paste a Sleeper league ID to browse stats, drafts, rankings, trades, and My Team (waiver pickups) for another league.'
+      ? 'Paste a Sleeper league ID to browse stats, drafts, rankings, trades, and Target for another league.'
       : 'Local dev: paste a Sleeper league ID to try guest browse without enabling site auth.';
   } else if (modes) {
     if (userLogin && siteLogin) {
@@ -210,8 +210,8 @@ export default function Login() {
           <header className="login-guest-header">
             <h2>{guestOnlyDevScreen ? 'Sleeper league' : 'Browse with a league ID'}</h2>
             <p className="muted login-lead">
-              Paste a Sleeper league ID for league stats, the trade analyzer, and My Team waiver
-              pickup values. Human League keepers and rules stay on the member app.
+              Paste a Sleeper league ID for league stats, the trade analyzer, and Target (top 3
+              waiver pickups per position). Human League keepers and rules stay on the member app.
             </p>
           </header>
 

@@ -59,7 +59,15 @@ export const leagueFormat = {
  * Keepers, rules, mock draft, and ceremony stay on the Human League auth path.
  * My Team is allowed so guests can pick a roster and see waiver upgrades.
  */
-export const GUEST_ALLOWED_PATHS = new Set(['/', '/stats', '/drafts', '/rankings', '/trades', '/me']);
+export const GUEST_ALLOWED_PATHS = new Set([
+  '/',
+  '/stats',
+  '/drafts',
+  '/rankings',
+  '/trades',
+  '/me',
+  '/targets',
+]);
 
 export function isGuestAllowedPath(pathname) {
   return GUEST_ALLOWED_PATHS.has(pathname);

@@ -144,7 +144,7 @@ export default function Home() {
               </span>
             ) : (
               <span className="home-hero__intro-lead">
-                Browsing this Sleeper league — stats, trades, and My Team waiver pickups.
+                Browsing this Sleeper league — stats, trades, and Target waiver pickups.
               </span>
             )}
           </p>
@@ -210,7 +210,13 @@ export default function Home() {
               to="/me"
               icon={MyTeamIcon}
               title="My team"
-              body="Pick your roster and see waiver pickup upgrades."
+              body="Pick your roster and see season stats."
+            />
+            <FeatureLink
+              to="/targets"
+              icon={TargetIcon}
+              title="Target"
+              body="Top 3 waiver pickups at every position, including FLEX."
             />
             <FeatureLink
               to="/drafts"
@@ -529,6 +535,26 @@ function MyTeamIcon() {
     >
       <circle cx="12" cy="8" r="4" />
       <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+    </svg>
+  );
+}
+
+function TargetIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
     </svg>
   );
 }

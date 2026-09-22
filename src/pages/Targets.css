@@ -1,0 +1,187 @@
+.targets-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.targets-lead {
+  margin: 0;
+  max-width: 42rem;
+  line-height: 1.5;
+}
+
+.targets-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.targets-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: min(100%, 260px);
+  flex: 1;
+}
+
+.targets-field label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.targets-field select {
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface, rgba(15, 23, 42, 0.65));
+  color: var(--color-text);
+  font: inherit;
+}
+
+.targets-team-meta {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.targets-holes {
+  margin: 0;
+  font-size: var(--fs-sm);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.targets-chip {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.targets-by-pos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.targets-pos-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.targets-pos-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.targets-pos-label {
+  font-weight: 600;
+}
+
+.targets-pos-title .muted {
+  font-weight: 500;
+  font-size: var(--fs-xs);
+}
+
+.targets-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.targets-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.targets-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.targets-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  vertical-align: middle;
+}
+
+.targets-table th:last-child,
+.targets-table td:last-child {
+  text-align: right;
+}
+
+.targets-need {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.targets-delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.targets-delta.is-up {
+  color: #4ade80;
+}
+
+.targets-delta.is-down {
+  color: #f87171;
+}
+
+.targets-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+/* Reuse My Team pos chip colors when that stylesheet is not loaded */
+.targets-page .my-team-pos {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.targets-page .my-team-pos--qb {
+  background: rgba(248, 113, 113, 0.18);
+}
+.targets-page .my-team-pos--rb {
+  background: rgba(74, 222, 128, 0.18);
+}
+.targets-page .my-team-pos--wr {
+  background: rgba(56, 189, 248, 0.18);
+}
+.targets-page .my-team-pos--te {
+  background: rgba(251, 191, 36, 0.18);
+}
+.targets-page .my-team-pos--dst,
+.targets-page .my-team-pos--flex {
+  background: rgba(167, 139, 250, 0.18);
+}

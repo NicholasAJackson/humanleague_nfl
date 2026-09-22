@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { canAccessKeepers, canAccessTradeAnalyzer, isConfigured, leagueFormat } from '../config.js';
+import { canAccessKeepers, isConfigured, leagueFormat } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
 import { useLeague } from '../LeagueContext.jsx';
 import BottomSheet from '../components/BottomSheet.jsx';
@@ -13,9 +13,6 @@ import {
 } from '../lib/sleeper.js';
 import { computeStats, getRegularSeasonMatchupPairs } from '../lib/stats.js';
 import { loadKeeperRankingsContext } from '../lib/loadKeeperRankingsContext.js';
-import { rosterPlayerIdSet } from '../lib/keeperRankings.js';
-import { formatWeightSummary } from '../lib/tradeBlend.js';
-import { findWaiverUpgrades, valuedPlayerFromSources, WAIVER_POS_ORDER } from '../lib/waiverUpgrades.js';
 import './MyTeam.css';
 
 function fmtNominationRow(n, lookup) {
@@ -390,138 +387,6 @@ function RosterTable({ roster, lookup, onViewRankings }) {
   );
 }
 
-function fmtWaiverUpgrade(n) {
-  if (n == null || !Number.isFinite(n)) return '—';
-  const v = Number(n);
-  const sign = v > 0 ? '+' : '';
-  return `${sign}${v.toFixed(1)}`;
-}
-
-function WaiverUpgradesCard({ blend, lookup, roster, rosters, showTradeLink, onViewPlayer }) {
-  const result = useMemo(() => {
-    if (blend.status !== 'ready' || !roster) return null;
-    const players = blend.data?.players || [];
-    const blendById = new Map();
-    for (const p of players) {
-      if (p.sleeper_id) blendById.set(String(p.sleeper_id), p);
-    }
-    const owned = rosterPlayerIdSet(rosters);
-    const rosterPlayers = rosterPlayerIds(roster).map((id) =>
-      valuedPlayerFromSources(id, blendById, lookup),
-    );
-    const freeAgents = [];
-    for (const p of players) {
-      const sid = p.sleeper_id != null ? String(p.sleeper_id) : '';
-      if (!sid || owned.has(sid)) continue;
-      freeAgents.push(valuedPlayerFromSources(sid, blendById, lookup));
-    }
-    return findWaiverUpgrades({ rosterPlayers, freeAgents });
-  }, [blend, lookup, roster, rosters]);
-
-  const weightLine =
-    blend.status === 'ready' && blend.data?.weights
-      ? formatWeightSummary(blend.data.weights, (blend.data.recent_weeks || []).length)
-      : '';
-
-  const posSections = useMemo(() => {
-    if (!result?.byPos) return [];
-    return WAIVER_POS_ORDER.filter((pos) => (result.byPos[pos] || []).length > 0).map((pos) => ({
-      pos,
-      rows: result.byPos[pos],
-    }));
-  }, [result]);
-
-  return (
-    <section className="card my-team-waivers-card">
-      <h2>Waiver upgrades</h2>
-      <p className="muted my-team-roster-hint">
-        Top 3 unowned targets per position who would raise your optimal starter lineup on in-season
-        trade value (same blend as the Trade analyzer). Adds only — no drop required for the delta.
-        {weightLine ? ` ${weightLine}.` : ''}
-      </p>
-
-      {(blend.status === 'idle' || blend.status === 'loading') && (
-        <p className="muted">Checking the wire…</p>
-      )}
-      {blend.status === 'error' && (
-        <p className="muted" role="alert">
-          Could not load waiver values: {blend.message}
-        </p>
-      )}
-      {blend.status === 'ready' && result && result.holes.length > 0 && (
-        <p className="my-team-waivers-holes">
-          Starter holes:{' '}
-          {result.holes.map((h) => (
-            <span key={h} className="my-team-waivers-chip">
-              {h}
-            </span>
-          ))}
-        </p>
-      )}
-      {blend.status === 'ready' && result && result.upgrades.length === 0 && (
-        <p className="muted">No unowned players would raise your starting lineup on current values.</p>
-      )}
-      {blend.status === 'ready' && posSections.length > 0 && (
-        <div className="my-team-waivers-by-pos">
-          {posSections.map(({ pos, rows }) => (
-            <div key={pos} className="my-team-waivers-pos-block">
-              <h3 className="my-team-waivers-pos-title">
-                <span className={`my-team-pos my-team-pos--${pos.toLowerCase()}`}>{pos}</span>
-                <span className="muted">Top {rows.length}</span>
-              </h3>
-              <div className="my-team-roster-scroll">
-                <table className="my-team-roster my-team-waivers-table">
-                  <thead>
-                    <tr>
-                      <th>Player</th>
-                      <th>Slot</th>
-                      <th>Upgrade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((u) => {
-                      const id = String(u.player.sleeper_id);
-                      const name = u.player.name || id;
-                      return (
-                        <tr key={id}>
-                          <td>
-                            {onViewPlayer ? (
-                              <button
-                                type="button"
-                                className="my-team-roster__player-hit"
-                                onClick={() => onViewPlayer(id)}
-                                aria-label={`Rankings for ${name}`}
-                              >
-                                {name}
-                              </button>
-                            ) : (
-                              name
-                            )}
-                            {u.fillsNeed ? (
-                              <span className="my-team-waivers-need">Fills hole</span>
-                            ) : null}
-                          </td>
-                          <td>{u.slot}</td>
-                          <td className="my-team-waivers-delta">{fmtWaiverUpgrade(u.upgrade)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {showTradeLink ? (
-        <p className="my-team-waivers-link">
-          <Link to="/trades">Open Trade analyzer →</Link>
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
 function managerOptions(users) {
   if (!Array.isArray(users)) return [];
   return users
@@ -549,7 +414,6 @@ export default function MyTeam() {
   const [nominations, setNominations] = useState([]);
   const [rankingsFocusId, setRankingsFocusId] = useState(null);
   const [ecrRankings, setEcrRankings] = useState({ status: 'idle' });
-  const [blendRankings, setBlendRankings] = useState({ status: 'idle' });
   const [keeperCtx, setKeeperCtx] = useState({ status: 'idle' });
   const [teamChoices, setTeamChoices] = useState({ status: 'idle', options: [] });
 
@@ -612,31 +476,6 @@ export default function MyTeam() {
       .catch((err) => {
         if (!cancelled)
           setEcrRankings({ status: 'error', message: err.message || String(err) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canLoadTeam]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!canLoadTeam) {
-      setBlendRankings({ status: 'idle' });
-      return;
-    }
-    setBlendRankings({ status: 'loading' });
-    fetch('/api/rankings?page_type=sleeper-trade-blend', { credentials: 'include' })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-        return data;
-      })
-      .then((data) => {
-        if (!cancelled) setBlendRankings({ status: 'ready', data });
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setBlendRankings({ status: 'error', message: err.message || String(err) });
       });
     return () => {
       cancelled = true;
@@ -1077,14 +916,15 @@ export default function MyTeam() {
         <RosterTable roster={roster} lookup={lookup} onViewRankings={(id) => setRankingsFocusId(id)} />
       </section>
 
-      <WaiverUpgradesCard
-        blend={blendRankings}
-        lookup={lookup}
-        roster={roster}
-        rosters={state.bundle?.rosters}
-        showTradeLink={canAccessTradeAnalyzer(user, devBypass, isGuest)}
-        onViewPlayer={(id) => setRankingsFocusId(id)}
-      />
+      <section className="card my-team-waivers-card">
+        <h2>Waiver targets</h2>
+        <p className="muted my-team-roster-hint">
+          Top 3 free agents at every position (including FLEX RB/WR) live on the Target page.
+        </p>
+        <p className="my-team-waivers-link">
+          <Link to="/targets">Open Target →</Link>
+        </p>
+      </section>
 
       <PlayerRankingsSheet
         open={rankingsFocusId != null}
