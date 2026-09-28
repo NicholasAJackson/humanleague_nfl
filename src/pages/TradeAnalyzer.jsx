@@ -235,6 +235,7 @@ export default function TradeAnalyzer() {
   const [managerB, setManagerB] = useState(NONE);
   const [finderFocal, setFinderFocal] = useState(NONE);
   const [finderPos, setFinderPos] = useState(NONE);
+  const [finderOfferId, setFinderOfferId] = useState(NONE);
   const [finderRan, setFinderRan] = useState(false);
   const [hype, setHype] = useState({ status: 'idle' });
 
@@ -408,6 +409,11 @@ export default function TradeAnalyzer() {
     return needHoleLabels(rosterStarterNeeds(rostersByOwner.get(managerA)));
   }, [managerA, rostersByOwner]);
 
+  const finderOfferOptions = useMemo(() => {
+    if (!finderFocal) return [];
+    return rostersByOwner.get(finderFocal) || [];
+  }, [finderFocal, rostersByOwner]);
+
   const suggestions = useMemo(() => {
     if (!finderRan || !finderFocal) return [];
     return findTradeSuggestions({
@@ -417,10 +423,11 @@ export default function TradeAnalyzer() {
       opts: {
         packageAdjust: true,
         wantPos: finderPos || null,
+        offerPlayerIds: finderOfferId ? [finderOfferId] : null,
         ...TRADE_VALUE_DEFAULTS,
       },
     });
-  }, [finderRan, finderFocal, finderPos, rostersByOwner, managers]);
+  }, [finderRan, finderFocal, finderPos, finderOfferId, rostersByOwner, managers]);
 
   const tradePlayersTagged = useMemo(() => {
     const out = [];
@@ -819,10 +826,10 @@ export default function TradeAnalyzer() {
                     Trade finder
                   </h2>
                   <p className="muted trade-finder__sub">
-                    Scans 1-for-1 and simple 2-for-1 packages for fair blended-value deals that
-                    improve starters. “Looking for” a position means you receive that spot from a
-                    team that has extras, and you send a position they are thin at — not a straight
-                    swap at the same position.
+                    Pick a player you&apos;re willing to move and the position you need (e.g. RB after
+                    an injury). Scans 1-for-1 through 2-for-2 and 3-for-1 packages for fair blended-value
+                    deals that improve starters. Extra pieces are added around your offer when needed
+                    to balance value.
                   </p>
                 </div>
               </header>
@@ -834,6 +841,7 @@ export default function TradeAnalyzer() {
                     value={finderFocal}
                     onChange={(e) => {
                       setFinderFocal(e.target.value);
+                      setFinderOfferId(NONE);
                       setFinderRan(false);
                     }}
                   >
@@ -841,6 +849,24 @@ export default function TradeAnalyzer() {
                     {managers.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="trade-control">
+                  <span className="trade-control__label">I&apos;m offering</span>
+                  <select
+                    value={finderOfferId}
+                    onChange={(e) => {
+                      setFinderOfferId(e.target.value);
+                      setFinderRan(false);
+                    }}
+                    disabled={!finderFocal}
+                  >
+                    <option value={NONE}>Any / auto-pick sends</option>
+                    {finderOfferOptions.map((p) => (
+                      <option key={playerKey(p)} value={String(p.sleeper_id)}>
+                        {p.name} ({p.pos || '?'}) · {playerTradeValue(p).toFixed(1)}
                       </option>
                     ))}
                   </select>
@@ -874,9 +900,11 @@ export default function TradeAnalyzer() {
 
               {finderRan && suggestions.length === 0 && (
                 <p className="muted">
-                  {finderPos
-                    ? `No fair ${finderPos} deals: need a partner who is deep at ${finderPos} and thin at a position you can send.`
-                    : 'No mutual upgrades that stay within a slight value edge.'}
+                  {finderOfferId && finderPos
+                    ? `No fair ${finderPos} deals using that offer. Try a different player, loosen to “Any position”, or build the trade manually above.`
+                    : finderPos
+                      ? `No fair ${finderPos} deals found. Try selecting a specific player you’re offering, or build the trade manually above.`
+                      : 'No mutual upgrades that stay within a slight value edge. Try picking a player you’re offering and a position you need.'}
                 </p>
               )}
 
@@ -894,6 +922,9 @@ export default function TradeAnalyzer() {
                         <div className="trade-finder__partner">vs {s.partnerLabel}</div>
                         <p className="trade-finder__pitch">{s.pitch}</p>
                         <div className="trade-finder__meta">
+                          <span className="trade-finder__shape">
+                            {s.sideBGets.length}-for-{s.sideAGets.length}
+                          </span>
                           <span className={`trade-finder__band trade-finder__band--${s.chart.fairness.band}`}>
                             {s.chart.fairness.label}
                           </span>

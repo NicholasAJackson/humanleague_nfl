@@ -35,16 +35,14 @@ function partnerDeepRbThinWr() {
   ];
 }
 
-function partnerThinRb() {
+function partnerNoRb() {
   return [
-    p(21, 'Thin QB', 'QB', 50),
-    p(22, 'Thin RB1', 'RB', 75),
-    p(23, 'Thin RB2', 'RB', 70),
-    p(24, 'Thin WR1', 'WR', 70),
-    p(25, 'Thin WR2', 'WR', 40),
-    p(26, 'Thin WR3', 'WR', 35),
-    p(27, 'Thin TE', 'TE', 40),
-    p(28, 'Thin DST', 'DST', 20),
+    p(21, 'NoRb QB', 'QB', 50),
+    p(24, 'NoRb WR1', 'WR', 70),
+    p(25, 'NoRb WR2', 'WR', 65),
+    p(26, 'NoRb WR3', 'WR', 60),
+    p(27, 'NoRb TE', 'TE', 40),
+    p(28, 'NoRb DST', 'DST', 20),
   ];
 }
 
@@ -61,7 +59,7 @@ describe('findTradeSuggestions wantPos', () => {
   const managers = [
     { id: 'you', label: 'You' },
     { id: 'deep', label: 'Deep RB' },
-    { id: 'thin', label: 'Thin RB' },
+    { id: 'norb', label: 'No RB' },
   ];
 
   it('does not suggest RB-for-RB when looking for an RB', () => {
@@ -87,12 +85,12 @@ describe('findTradeSuggestions wantPos', () => {
     }
   });
 
-  it('skips partners who cannot spare an RB', () => {
+  it('skips partners with no RBs when looking for RB', () => {
     const hits = findTradeSuggestions({
       focalOwnerId: 'you',
       rostersByOwner: new Map([
         ['you', youThinAtRb()],
-        ['thin', partnerThinRb()],
+        ['norb', partnerNoRb()],
       ]),
       managers,
       opts: { wantPos: 'RB' },
@@ -100,7 +98,7 @@ describe('findTradeSuggestions wantPos', () => {
     assert.equal(hits.length, 0);
   });
 
-  it('prefers sending a position the partner is thin at', () => {
+  it('locks offered player into every suggestion', () => {
     const hits = findTradeSuggestions({
       focalOwnerId: 'you',
       rostersByOwner: new Map([
@@ -108,9 +106,33 @@ describe('findTradeSuggestions wantPos', () => {
         ['deep', partnerDeepRbThinWr()],
       ]),
       managers,
-      opts: { wantPos: 'RB', maxResults: 20 },
+      opts: { wantPos: 'RB', offerPlayerIds: ['6'], maxResults: 20 },
     });
-    assert.ok(hits.some((h) => h.sideBGets.some((p) => p.pos === 'WR')));
-    assert.ok(hits.every((h) => /thin at/i.test(h.pitch)));
+    assert.ok(hits.length > 0, 'expected deals including Your WR3');
+    for (const hit of hits) {
+      assert.ok(
+        hit.sideBGets.some((p) => p.sleeper_id === '6'),
+        'offer must be sent',
+      );
+      assert.ok(hit.sideAGets.some((p) => p.pos === 'RB'));
+    }
+  });
+
+  it('can suggest 2-for-1 / 2-for-2 / 3-for-1 shapes around an offer', () => {
+    const hits = findTradeSuggestions({
+      focalOwnerId: 'you',
+      rostersByOwner: new Map([
+        ['you', youThinAtRb()],
+        ['deep', partnerDeepRbThinWr()],
+      ]),
+      managers,
+      opts: { wantPos: 'RB', offerPlayerIds: ['7'], maxResults: 40 },
+    });
+    assert.ok(hits.length > 0);
+    const shapes = new Set(hits.map((h) => `${h.sideBGets.length}-${h.sideAGets.length}`));
+    assert.ok(
+      [...shapes].some((s) => s !== '1-1'),
+      `expected multi-player packages, got ${[...shapes].join(', ')}`,
+    );
   });
 });
