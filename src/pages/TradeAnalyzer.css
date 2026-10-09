@@ -796,3 +796,113 @@
   font-weight: 500;
   color: var(--color-text-mute);
 }
+
+.trade-market,
+.trade-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.trade-market__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.trade-market__col-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-dim);
+}
+
+.trade-market__list,
+.trade-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trade-market__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.trade-market__row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.trade-market__nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trade-market__nums .is-up {
+  color: #4ade80;
+}
+
+.trade-market__nums .is-down {
+  color: #f87171;
+}
+
+.trade-history__item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.trade-history__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.trade-history__when {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trade-history__deal {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.trade-history__item .btn {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+@media (max-width: 720px) {
+  .trade-market__grid {
+    grid-template-columns: 1fr;
+  }
+}

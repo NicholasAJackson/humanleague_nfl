@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { canAccessTradeAnalyzer, isConfigured } from '../config.js';
 import { useAuth } from '../AuthContext.jsx';
 import { useLeague } from '../LeagueContext.jsx';
@@ -11,7 +11,10 @@ import {
   rosterPlayerIds,
 } from '../lib/sleeper.js';
 import { rosterPlayerIdSet } from '../lib/keeperRankings.js';
-import { fmtTradeDelta, fmtTradeValue } from '../lib/tradeValue.js';
+import { fmtTradeDelta, fmtTradeValue, TRADE_VALUE_DEFAULTS } from '../lib/tradeValue.js';
+import { findTradeSuggestions } from '../lib/tradeFinder.js';
+import { rosterMarketMovers, fmtTrend30d } from '../lib/tradeMarket.js';
+import { stashPendingTrade } from '../lib/pendingTrade.js';
 import {
   findWaiverTargets,
   valuedPlayerFromSources,
@@ -61,6 +64,7 @@ export default function Targets() {
   const { ready, authenticated, authEnabled, devBypass, user } = useAuth();
   const { leagueId, isGuest, guestOwnerId, setGuestOwnerId, guestLeagueName } = useLeague();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const commissionerAs =
     !isGuest && authEnabled && user?.role === 'commissioner'
       ? searchParams.get('user')?.trim() || ''
@@ -209,6 +213,62 @@ export default function Targets() {
     return findWaiverTargets({ rosterPlayers, freeAgents });
   }, [blend, rosterState, lookup]);
 
+  const board = useMemo(() => {
+    if (blend.status !== 'ready' || rosterState.status !== 'ready' || !effectiveOwnerId) {
+      return null;
+    }
+    const players = blend.data?.players || [];
+    const blendById = new Map();
+    for (const p of players) {
+      if (p.sleeper_id) blendById.set(String(p.sleeper_id), p);
+    }
+    const rostersByOwner = new Map();
+    for (const roster of rosterState.rosters || []) {
+      if (roster?.owner_id == null) continue;
+      const list = rosterPlayerIds(roster).map((id) => {
+        const row = blendById.get(String(id));
+        return row
+          ? {
+              sleeper_id: String(id),
+              name: row.name,
+              pos: row.pos,
+              team: row.team,
+              value: row.value,
+              trend_30d: row.trend_30d,
+              ecr: row.ecr,
+            }
+          : valuedPlayerFromSources(id, blendById, lookup);
+      });
+      rostersByOwner.set(String(roster.owner_id), list);
+    }
+    const ownerLabel = (id) =>
+      teamChoices.options.find((o) => o.id === String(id))?.label || String(id || '');
+    return {
+      movers: rosterMarketMovers({
+        players,
+        rostersByOwner,
+        ownerLabel,
+        focalOwnerId: effectiveOwnerId,
+      }),
+      suggestions: findTradeSuggestions({
+        focalOwnerId: effectiveOwnerId,
+        rostersByOwner,
+        managers: teamChoices.options,
+        opts: { ...TRADE_VALUE_DEFAULTS, packageAdjust: true, maxResults: 3 },
+      }),
+    };
+  }, [blend, rosterState, lookup, effectiveOwnerId, teamChoices.options]);
+
+  function openSuggestion(s) {
+    stashPendingTrade({
+      managerA: effectiveOwnerId,
+      managerB: s.partnerId,
+      sideA: s.sideAGets,
+      sideB: s.sideBGets,
+    });
+    navigate('/trades');
+  }
+
 
   function onPickTeam(e) {
     const id = e.target.value;
@@ -271,8 +331,8 @@ export default function Targets() {
         <span className="eyebrow">Waiver wire</span>
         <h1>Target</h1>
         <p className="muted targets-lead">
-          Top 3 free agents at every position for your roster, plus FLEX targets (RB / WR), ranked on
-          the same FantasyCalc redraft values as the Trade analyzer.
+          Waiver pickups, buy-low / sell-high names from FantasyCalc&apos;s 30-day trend, and a top
+          trade for this roster.
           {guestLeagueName ? ` · ${guestLeagueName}` : ''}
         </p>
         <FantasyCalcAttribution extra="Kickers and DST are not in this list." />
@@ -346,6 +406,100 @@ export default function Targets() {
         <p className="muted" role="alert">
           Could not load waiver values: {blend.message}
         </p>
+      )}
+
+      {board && (board.movers.sellHigh.length > 0 || board.movers.buyLow.length > 0) && (
+        <section className="card targets-market">
+          <h2 className="targets-board-title">Sell high / buy low</h2>
+          <p className="muted targets-board-sub">
+            FantasyCalc 30-day value change. Sell names on your roster that the market has run up;
+            buy names on other teams that have dropped.
+          </p>
+          <div className="targets-market__grid">
+            <div>
+              <h3 className="targets-market__col">Sell high · yours</h3>
+              {board.movers.sellHigh.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  No risers on this roster over the value cutoff.
+                </p>
+              ) : (
+                <ul className="targets-market__list">
+                  {board.movers.sellHigh.map((r) => (
+                    <li key={r.sleeper_id}>
+                      <span>
+                        <strong>{r.name}</strong>
+                        <span className="muted"> {[r.pos, r.team].filter(Boolean).join(' · ')}</span>
+                      </span>
+                      <span className="targets-delta is-up">{fmtTrend30d(r.trend)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <h3 className="targets-market__col">Buy low · other teams</h3>
+              {board.movers.buyLow.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  No fallen rostered names over the value cutoff.
+                </p>
+              ) : (
+                <ul className="targets-market__list">
+                  {board.movers.buyLow.map((r) => (
+                    <li key={r.sleeper_id}>
+                      <span>
+                        <strong>{r.name}</strong>
+                        <span className="muted">
+                          {' '}
+                          {[r.pos, r.team, r.ownerLabel].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                      <span className="targets-delta is-down">{fmtTrend30d(r.trend)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {board && (
+        <section className="card targets-top-trade">
+          <h2 className="targets-board-title">Top trade</h2>
+          <p className="muted targets-board-sub">
+            Best fair FantasyCalc deals that improve a starting lineup, same engine as the trade
+            finder.
+          </p>
+          {board.suggestions.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>
+              No fair mutual-upgrade deals popped for this roster. Try the trade finder to lock an
+              offer.
+            </p>
+          ) : (
+            <ul className="targets-top-trade__list">
+              {board.suggestions.map((s) => {
+                const id = [
+                  s.partnerId,
+                  ...s.sideBGets.map((p) => p.sleeper_id),
+                  ...s.sideAGets.map((p) => p.sleeper_id),
+                ].join('-');
+                return (
+                  <li key={id}>
+                    <div>
+                      <div className="targets-top-trade__vs">vs {s.partnerLabel}</div>
+                      <p>{s.pitch}</p>
+                    </div>
+                    {canAccessTradeAnalyzer(user, devBypass, isGuest) ? (
+                      <button type="button" className="btn btn-ghost" onClick={() => openSuggestion(s)}>
+                        Open
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       )}
 
       {result && result.holes.length > 0 && (

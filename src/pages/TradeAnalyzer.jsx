@@ -5,6 +5,8 @@ import { useLeague } from '../LeagueContext.jsx';
 import {
   resolveLeagueHistoryChain,
   fetchSeasonBundle,
+  fetchLeagueTrades,
+  getNflPlayersLookup,
   rosterPlayerIds,
 } from '../lib/sleeper.js';
 import {
@@ -22,6 +24,9 @@ import {
   scoreTradeRosterImpact,
 } from '../lib/rosterNeeds.js';
 import { findTradeSuggestions } from '../lib/tradeFinder.js';
+import { gradeLeagueTrades } from '../lib/leagueTrades.js';
+import { leagueMarketMovers, fmtTrend30d } from '../lib/tradeMarket.js';
+import { peekPendingTrade, consumePendingTrade } from '../lib/pendingTrade.js';
 import {
   matchTradeHype,
   formatTrendLabel,
@@ -112,17 +117,23 @@ async function loadRosterContext(leagueId) {
     const hasPlayers = (bundle.rosters || []).some((r) => rosterPlayerIds(r).length > 0);
     if (!hasPlayers) continue;
     const byOwner = new Map();
+    const rosterToOwner = new Map();
     for (const roster of bundle.rosters || []) {
       if (roster?.owner_id == null) continue;
-      byOwner.set(String(roster.owner_id), new Set(rosterPlayerIds(roster)));
+      const oid = String(roster.owner_id);
+      byOwner.set(oid, new Set(rosterPlayerIds(roster)));
+      if (roster.roster_id != null) {
+        rosterToOwner.set(Number(roster.roster_id), oid);
+      }
     }
     return {
       season: meta.season || bundle.league?.season || null,
       users: bundle.users || [],
       byOwner,
+      rosterToOwner,
     };
   }
-  return { season: null, users: [], byOwner: new Map() };
+  return { season: null, users: [], byOwner: new Map(), rosterToOwner: new Map() };
 }
 
 function SidePanel({
@@ -221,6 +232,53 @@ function upgradeClass(n) {
   return 'is-flat';
 }
 
+function historyBandText(row) {
+  const fair = row.chart?.fairness;
+  if (!fair || fair.band === 'empty') return 'No FantasyCalc values';
+  const [a, b] = row.sides;
+  const winner = fair.winner === 'a' ? a.label : fair.winner === 'b' ? b.label : null;
+  if (fair.band === 'fair' && fair.winner === 'even') return 'Fair today';
+  if (fair.band === 'fair') return `Fair · ${winner} by ${fair.gapPct}%`;
+  if (fair.band === 'slight') return `${winner} slight edge (${fair.gapPct}%)`;
+  return `${winner} won on today's values (${fair.gapPct}%)`;
+}
+
+function sideAssetsLine(side, extra) {
+  const names = (side.received || []).map((p) => p.name).join(', ');
+  const bits = [names || null, extra].filter(Boolean);
+  return bits.join(' · ') || '—';
+}
+
+function MarketList({ title, kind, rows }) {
+  return (
+    <div className="trade-market__col">
+      <h3 className="trade-market__col-title">{title}</h3>
+      {rows.length === 0 ? (
+        <p className="muted" style={{ margin: 0 }}>
+          None over the value cutoff.
+        </p>
+      ) : (
+        <ul className="trade-market__list">
+          {rows.map((r) => (
+            <li key={r.sleeper_id} className="trade-market__row">
+              <div>
+                <strong>{r.name}</strong>
+                <span className="muted">
+                  {[r.pos, r.team, r.ownerLabel].filter(Boolean).join(' · ')}
+                </span>
+              </div>
+              <div className="trade-market__nums">
+                <span className={kind === 'up' ? 'is-up' : 'is-down'}>{fmtTrend30d(r.trend)}</span>
+                <span className="muted">{fmtTradeValue(r.value)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function TradeAnalyzer() {
   const { user } = useAuth();
   const { leagueId } = useLeague();
@@ -235,6 +293,8 @@ export default function TradeAnalyzer() {
   const [finderOfferId, setFinderOfferId] = useState(NONE);
   const [finderRan, setFinderRan] = useState(false);
   const [hype, setHype] = useState({ status: 'idle' });
+  const [rawTrades, setRawTrades] = useState({ status: 'idle', trades: [] });
+  const [lookup, setLookup] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,7 +343,13 @@ export default function TradeAnalyzer() {
 
   useEffect(() => {
     if (!isConfigured(leagueId)) {
-      setRosterCtx({ status: 'ready', season: null, users: [], byOwner: new Map() });
+      setRosterCtx({
+        status: 'ready',
+        season: null,
+        users: [],
+        byOwner: new Map(),
+        rosterToOwner: new Map(),
+      });
       return;
     }
     let cancelled = false;
@@ -299,7 +365,43 @@ export default function TradeAnalyzer() {
             season: null,
             users: [],
             byOwner: new Map(),
+            rosterToOwner: new Map(),
             message: err.message,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [leagueId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getNflPlayersLookup().then((m) => {
+      if (!cancelled) setLookup(m);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isConfigured(leagueId)) {
+      setRawTrades({ status: 'ready', trades: [] });
+      return;
+    }
+    let cancelled = false;
+    setRawTrades({ status: 'loading', trades: [] });
+    fetchLeagueTrades(leagueId)
+      .then((trades) => {
+        if (!cancelled) setRawTrades({ status: 'ready', trades });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRawTrades({
+            status: 'error',
+            trades: [],
+            message: err.message || 'Could not load trades',
           });
         }
       });
@@ -325,6 +427,17 @@ export default function TradeAnalyzer() {
       setManagerA((prev) => prev || mine);
     }
   }, [rosterCtx.status, managers, user?.sleeperUserId]);
+
+  useEffect(() => {
+    if (rankings.status !== 'ready' || rosterCtx.status !== 'ready') return;
+    const pending = peekPendingTrade();
+    if (!pending) return;
+    if (pending.managerA) setManagerA(String(pending.managerA));
+    if (pending.managerB) setManagerB(String(pending.managerB));
+    if (Array.isArray(pending.sideA)) setSideA(pending.sideA.map(toTradePlayer));
+    if (Array.isArray(pending.sideB)) setSideB(pending.sideB.map(toTradePlayer));
+    if (pending.managerA) setFinderFocal((prev) => prev || String(pending.managerA));
+  }, [rankings.status, rosterCtx.status]);
 
   const ecrBySleeper = useMemo(() => {
     const m = new Map();
@@ -362,6 +475,35 @@ export default function TradeAnalyzer() {
     for (const x of managers) m.set(x.id, x.label);
     return m;
   }, [managers]);
+
+  const leagueTradeRows = useMemo(() => {
+    if (rawTrades.status !== 'ready' || rankings.status !== 'ready') return [];
+    return gradeLeagueTrades(rawTrades.trades, {
+      rosterToOwner: rosterCtx.rosterToOwner || new Map(),
+      playerById: ecrBySleeper,
+      lookup,
+      ownerLabel: (ownerId, rid) =>
+        (ownerId && labelById.get(String(ownerId))) || `Roster ${rid}`,
+    });
+  }, [
+    rawTrades,
+    rankings.status,
+    rosterCtx.rosterToOwner,
+    ecrBySleeper,
+    lookup,
+    labelById,
+  ]);
+
+  const market = useMemo(() => {
+    if (rankings.status !== 'ready' || rostersByOwner.size === 0) {
+      return { sellHigh: [], buyLow: [] };
+    }
+    return leagueMarketMovers({
+      players,
+      rostersByOwner,
+      ownerLabel: (id) => labelById.get(String(id)) || 'Unknown',
+    });
+  }, [rankings.status, players, rostersByOwner, labelById]);
 
   const selectedKeys = useMemo(() => {
     const s = new Set();
@@ -454,6 +596,7 @@ export default function TradeAnalyzer() {
   }
 
   function clearAll() {
+    consumePendingTrade();
     setSideA([]);
     setSideB([]);
   }
@@ -463,6 +606,18 @@ export default function TradeAnalyzer() {
     setManagerB(s.partnerId);
     setSideA(s.sideAGets.map(toTradePlayer));
     setSideB(s.sideBGets.map(toTradePlayer));
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function loadHistoryTrade(row) {
+    if (!row?.loadable) return;
+    const [a, b] = row.sides;
+    setManagerA(a.ownerId);
+    setManagerB(b.ownerId);
+    setSideA((a.received || []).map(toTradePlayer));
+    setSideB((b.received || []).map(toTradePlayer));
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -817,6 +972,26 @@ export default function TradeAnalyzer() {
             </section>
           )}
 
+          {(market.sellHigh.length > 0 || market.buyLow.length > 0) && (
+            <section className="trade-market card" aria-labelledby="trade-market-title">
+              <header className="trade-finder__head">
+                <div>
+                  <h2 id="trade-market-title" className="trade-finder__title">
+                    Sell high / buy low
+                  </h2>
+                  <p className="muted trade-finder__sub">
+                    Biggest FantasyCalc 30-day value moves among rostered players. Risers are sell-high
+                    candidates; fallers are buy-lows.
+                  </p>
+                </div>
+              </header>
+              <div className="trade-market__grid">
+                <MarketList title="Sell high" kind="up" rows={market.sellHigh} />
+                <MarketList title="Buy low" kind="down" rows={market.buyLow} />
+              </div>
+            </section>
+          )}
+
           {managers.length > 0 && (
             <section className="trade-finder card" aria-labelledby="trade-finder-title">
               <header className="trade-finder__head">
@@ -949,6 +1124,74 @@ export default function TradeAnalyzer() {
               )}
             </section>
           )}
+
+          <section className="trade-history card" aria-labelledby="trade-history-title">
+            <header className="trade-finder__head">
+              <div>
+                <h2 id="trade-history-title" className="trade-finder__title">
+                  League trades
+                </h2>
+                <p className="muted trade-finder__sub">
+                  Completed Sleeper trades this season, graded with <em>today&apos;s</em> FantasyCalc
+                  values — not what they were worth on the day.
+                </p>
+              </div>
+            </header>
+            {rawTrades.status === 'loading' || rawTrades.status === 'idle' ? (
+              <p className="muted">Loading league trades…</p>
+            ) : null}
+            {rawTrades.status === 'error' ? (
+              <p className="muted" role="alert">
+                {rawTrades.message}
+              </p>
+            ) : null}
+            {rawTrades.status === 'ready' && leagueTradeRows.length === 0 ? (
+              <p className="muted">No completed trades in Sleeper for this season yet.</p>
+            ) : null}
+            {leagueTradeRows.length > 0 ? (
+              <ul className="trade-history__list">
+                {leagueTradeRows.map((row) => {
+                  const band = row.chart?.fairness?.band || 'empty';
+                  return (
+                    <li key={row.id} className="trade-history__item">
+                      <div className="trade-history__main">
+                        <div className="trade-history__when">{row.when}</div>
+                        {row.sides.map((side, i) => (
+                          <p key={side.rosterId} className="trade-history__deal">
+                            <strong>{side.label}</strong> gets {sideAssetsLine(side, row.extras[i])}
+                          </p>
+                        ))}
+                        <div className="trade-finder__meta">
+                          <span className={`trade-finder__band trade-finder__band--${band}`}>
+                            {historyBandText(row)}
+                          </span>
+                          {row.chart ? (
+                            <span className="muted">
+                              {fmtTradeValue(row.chart.totalA)} vs {fmtTradeValue(row.chart.totalB)}
+                            </span>
+                          ) : null}
+                          {row.missing > 0 ? (
+                            <span className="muted">
+                              {row.missing} player{row.missing === 1 ? '' : 's'} not on FantasyCalc
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      {row.loadable ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => loadHistoryTrade(row)}
+                        >
+                          Load
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </section>
 
           {/* <p className="muted trade-footnote">
             Values decay from Sleeper ADP rank 1 (100 pts). Starter upgrades rebuild each roster into

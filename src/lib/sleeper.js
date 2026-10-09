@@ -33,6 +33,46 @@ export function fetchNflState() {
   return getJSON('/state/nfl');
 }
 
+export function fetchLeagueTransactions(leagueId, week) {
+  return getJSON(`/league/${leagueId}/transactions/${week}`);
+}
+
+/**
+ * Completed Sleeper trades for this league, weeks 0 through the live NFL week.
+ */
+export async function fetchLeagueTrades(leagueId, { throughWeek } = {}) {
+  if (!leagueId) return [];
+  let last = Number(throughWeek);
+  if (!Number.isFinite(last) || last < 0) {
+    try {
+      const state = await fetchNflState();
+      last = Number(state?.display_week ?? state?.week ?? 1);
+    } catch {
+      last = 1;
+    }
+  }
+  last = Math.min(22, Math.max(0, Math.floor(last)));
+  const weeks = Array.from({ length: last + 1 }, (_, i) => i);
+  const batches = await Promise.all(
+    weeks.map((w) => fetchLeagueTransactions(leagueId, w).catch(() => [])),
+  );
+  const seen = new Set();
+  const trades = [];
+  for (const list of batches) {
+    if (!Array.isArray(list)) continue;
+    for (const tx of list) {
+      if (!tx || tx.type !== 'trade') continue;
+      if (tx.status && tx.status !== 'complete') continue;
+      const id = String(tx.transaction_id || `${tx.leg || ''}-${tx.created}`);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      trades.push(tx);
+    }
+  }
+  trades.sort((a, b) => Number(b.created || 0) - Number(a.created || 0));
+  return trades;
+}
+
 const _nflScheduleCache = new Map();
 
 /**
