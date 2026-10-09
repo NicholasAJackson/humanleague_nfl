@@ -532,12 +532,8 @@ function CareerTable({ career, seasonCount }) {
     return <p className="muted">No manager rows could be built from the loaded seasons.</p>;
   }
   return (
-    <>
-      <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
-        Imagine having the best record over 2 years and not having a championship. What's that feel like Mike?
-      </p>
-      <div className="scroll-x">
-        <table>
+    <div className="scroll-x">
+      <table>
           <thead>
             <tr>
               <th>#</th>
@@ -618,8 +614,7 @@ function CareerTable({ career, seasonCount }) {
             })}
           </tbody>
         </table>
-      </div>
-    </>
+    </div>
   );
 }
 

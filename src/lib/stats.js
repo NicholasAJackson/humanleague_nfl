@@ -262,12 +262,35 @@ function bracketRowHasLoserPath(row) {
   );
 }
 
-/** Sleeper publishes the real champion on the league object when the season is complete. */
+function leagueSeasonIsComplete(league) {
+  return String(league?.status || '') === 'complete';
+}
+
+/**
+ * Sleeper copies `latest_league_winner_roster_id` onto the next season's league
+ * object before playoffs finish. Only trust it after the season is complete.
+ */
 function championRosterIdFromLeague(league) {
+  if (!leagueSeasonIsComplete(league)) return null;
   const raw = league?.metadata?.latest_league_winner_roster_id;
   if (raw == null || raw === '' || String(raw) === '0') return null;
   const id = Number(raw);
   return Number.isFinite(id) ? id : null;
+}
+
+/** Championship game only (`p === 1` with a real winner). */
+function championRosterIdFromChampionshipGame(bracket) {
+  if (!Array.isArray(bracket) || bracket.length === 0) return null;
+  const row = bracket.find((r) => Number(r.p) === 1);
+  if (!row) return null;
+  const w = Number(row.w);
+  const t1 = Number(row.t1);
+  const t2 = Number(row.t2);
+  if (!Number.isFinite(w) || !Number.isFinite(t1) || !Number.isFinite(t2) || t1 === t2) {
+    return null;
+  }
+  if (w !== t1 && w !== t2) return null;
+  return w;
 }
 
 /**
@@ -298,8 +321,16 @@ function championRosterIdFromBracket(bracket) {
   return top.length ? Number(top[0].w) : null;
 }
 
-/** Champion roster id for a season (metadata first, then bracket). */
+/**
+ * Champion roster id for a season.
+ * In-progress leagues: only a finished championship game counts (never leftover
+ * metadata from last year, never an unfinished playoff round).
+ * Completed leagues: championship game, then metadata, then deepest winners round.
+ */
 export function getChampionRosterId(league, winnersBracket) {
+  const fromFinal = championRosterIdFromChampionshipGame(winnersBracket);
+  if (fromFinal != null) return fromFinal;
+  if (!leagueSeasonIsComplete(league)) return null;
   return (
     championRosterIdFromLeague(league) ??
     championRosterIdFromBracket(winnersBracket)
