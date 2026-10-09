@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import { useLeague } from '../LeagueContext.jsx';
-import { canAccessGuestBrowse, DEV_LOGIN_SCREEN } from '../config.js';
+import { canAccessGuestBrowse, DEV_LOGIN_SCREEN, GUEST_BROWSE_LEAGUES } from '../config.js';
 import './Login.css';
 
 async function fetchAuthConfig() {
@@ -19,9 +19,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [modes, setModes] = useState(null);
-  const [guestId, setGuestId] = useState('');
   const [guestError, setGuestError] = useState('');
-  const [guestSubmitting, setGuestSubmitting] = useState(false);
+  const [guestSubmittingId, setGuestSubmittingId] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
@@ -36,13 +35,6 @@ export default function Login() {
       cancelled = true;
     };
   }, []);
-
-  // Prefill when changing league while already browsing.
-  useEffect(() => {
-    if (isGuest && activeLeagueId && !guestId) {
-      setGuestId(activeLeagueId);
-    }
-  }, [isGuest, activeLeagueId, guestId]);
 
   const hasRealSession = authenticated && !devBypass;
   const guestOnlyDevScreen = DEV_LOGIN_SCREEN && !authEnabled;
@@ -95,17 +87,16 @@ export default function Login() {
     }
   }
 
-  async function onBrowse(e) {
-    e.preventDefault();
+  async function onBrowseLeague(leagueId) {
     setGuestError('');
-    setGuestSubmitting(true);
+    setGuestSubmittingId(String(leagueId));
     try {
-      await enterGuestLeague(guestId);
+      await enterGuestLeague(leagueId);
       navigate('/', { replace: true });
     } catch (err) {
       setGuestError(err?.message || 'Could not load that league.');
     } finally {
-      setGuestSubmitting(false);
+      setGuestSubmittingId('');
     }
   }
 
@@ -115,21 +106,19 @@ export default function Login() {
   }
 
   let lead =
-    'Sign in to open the Human League hub, or paste any Sleeper league ID to browse stats, trades, and Target waiver pickups.';
+    'Sign in to open the Human League hub, or pick a league below to browse stats, trades, and Target.';
   if (guestOnlyDevScreen || (hasRealSession && showGuestBrowse)) {
     lead = hasRealSession
-      ? 'Paste a Sleeper league ID to browse stats, drafts, rankings, trades, and Target for another league.'
-      : 'Local dev: paste a Sleeper league ID to try guest browse without enabling site auth.';
+      ? 'Pick a league to browse stats, drafts, rankings, trades, and Target.'
+      : 'Local dev: pick a league to try guest browse without enabling site auth.';
   } else if (modes) {
     if (userLogin && siteLogin) {
-      lead =
-        'Sign in with your member account, or paste a Sleeper league ID below to browse another league.';
+      lead = 'Sign in with your member account, or pick a league below to browse without signing in.';
     } else if (userLogin) {
       lead =
-        'Use the username and password your commissioner set up, or paste a Sleeper league ID to browse another league.';
+        'Use the username and password your commissioner set up, or pick a league below to browse.';
     } else if (siteLogin) {
-      lead =
-        'Enter the shared league password, or paste a Sleeper league ID to browse another league.';
+      lead = 'Enter the shared league password, or pick a league below to browse without signing in.';
     }
   }
 
@@ -144,7 +133,7 @@ export default function Login() {
         </svg>
       </div>
       <header className="page-header">
-        <span className="eyebrow">{browseOnly ? (guestOnlyDevScreen ? 'Local dev' : 'Any Sleeper league') : 'Human League'}</span>
+        <span className="eyebrow">{browseOnly ? (guestOnlyDevScreen ? 'Local dev' : 'Allowed leagues') : 'Human League'}</span>
         <h1>{browseOnly ? 'Browse a league' : 'Sign in'}</h1>
         <p className="muted login-lead">{lead}</p>
       </header>
@@ -161,7 +150,7 @@ export default function Login() {
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                disabled={submitting || guestSubmitting}
+                disabled={submitting || Boolean(guestSubmittingId)}
                 required={usernameRequired}
                 placeholder={userLogin ? 'e.g. Dansa-Bellend' : 'Optional for shared password'}
               />
@@ -180,7 +169,7 @@ export default function Login() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={submitting || guestSubmitting}
+              disabled={submitting || Boolean(guestSubmittingId)}
               required
               minLength={usernameRequired ? 8 : 1}
             />
@@ -192,7 +181,7 @@ export default function Login() {
           <button
             type="submit"
             className="btn btn-primary login-submit"
-            disabled={submitting || guestSubmitting}
+            disabled={submitting || Boolean(guestSubmittingId)}
           >
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
@@ -206,45 +195,37 @@ export default function Login() {
       ) : null}
 
       {showGuestBrowse ? (
-        <form className="card login-card login-card--guest" onSubmit={onBrowse}>
+        <div className="card login-card login-card--guest">
           <header className="login-guest-header">
-            <h2>{guestOnlyDevScreen ? 'Sleeper league' : 'Browse with a league ID'}</h2>
+            <h2>{guestOnlyDevScreen ? 'Sleeper league' : 'Browse a league'}</h2>
             <p className="muted login-lead">
-              Paste a Sleeper league ID for league stats, the trade analyzer, and Target (top 3
-              waiver pickups per position). Human League keepers and rules stay on the member app.
+              Open a public league for stats, the trade analyzer, and Target. No sign-in required.
+              Human League keepers and rules stay on the member app.
             </p>
           </header>
 
-          <div className="login-field">
-            <label htmlFor="guest-league-id">Sleeper league ID</label>
-            <input
-              id="guest-league-id"
-              name="leagueId"
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              value={guestId}
-              onChange={(e) => setGuestId(e.target.value)}
-              disabled={submitting || guestSubmitting}
-              required
-              placeholder="e.g. 1389346393180639232"
-            />
-            <p className="login-hint">
-              Find it in the Sleeper URL when you open the league (
-              <code>…/leagues/…</code>).
-            </p>
+          <div className="login-league-list">
+            {GUEST_BROWSE_LEAGUES.map((league) => {
+              const current = isGuest && String(activeLeagueId) === String(league.id);
+              const loading = guestSubmittingId === String(league.id);
+              return (
+                <button
+                  key={league.id}
+                  type="button"
+                  className={
+                    'btn login-submit login-submit--guest' + (current ? ' is-current' : '')
+                  }
+                  disabled={submitting || Boolean(guestSubmittingId)}
+                  onClick={() => onBrowseLeague(league.id)}
+                >
+                  {loading ? 'Loading…' : current ? `${league.name} (current)` : league.name}
+                </button>
+              );
+            })}
           </div>
 
           {guestError ? <p className="login-err">{guestError}</p> : null}
-
-          <button
-            type="submit"
-            className="btn login-submit login-submit--guest"
-            disabled={submitting || guestSubmitting}
-          >
-            {guestSubmitting ? 'Loading league…' : isGuest ? 'Switch league' : 'Browse league'}
-          </button>
-        </form>
+        </div>
       ) : null}
 
       {hasRealSession ? (

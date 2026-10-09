@@ -40,7 +40,7 @@ function PageFallback() {
   );
 }
 
-/** Signed-in members, or guests with a pasted Sleeper league id. */
+/** Signed-in members, or guests who picked an allowed Sleeper league. */
 function RequireAccess() {
   const { ready, authenticated, authEnabled } = useAuth();
   const { isGuest } = useLeague();

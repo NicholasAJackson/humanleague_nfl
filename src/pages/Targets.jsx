@@ -247,7 +247,7 @@ export default function Targets() {
     return (
       <div className="page targets-page">
         <p className="muted">
-          <Link to="/login">Sign in</Link> or paste a league ID to see waiver targets.
+          <Link to="/login">Sign in</Link> or pick a league to see waiver targets.
         </p>
       </div>
     );

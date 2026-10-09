@@ -30,18 +30,32 @@ function envFlagTrue(name) {
 }
 
 /**
- * Local-only: keep `/login` reachable so you can paste a Sleeper league ID for guest browse,
+ * Local-only: keep `/login` reachable so you can pick a guest-browse league,
  * even when site auth is off (dev bypass). Set `VITE_DEV_LOGIN_SCREEN=1` in `.env.local`.
  * Ignored in production builds.
  */
 export const DEV_LOGIN_SCREEN = Boolean(viteEnv.DEV && envFlagTrue('VITE_DEV_LOGIN_SCREEN'));
 
 /**
- * Guest browse via a pasted Sleeper league ID — available to everyone on the login screen
- * (signed-in members, anonymous visitors, and local DEV).
+ * Guest browse — available to everyone on the login screen (signed-in members,
+ * anonymous visitors, and local DEV). Only leagues in {@link GUEST_BROWSE_LEAGUES}.
  */
 export function canAccessGuestBrowse(_user, _devBypass, _opts = {}) {
   return true;
+}
+
+/**
+ * Public browse buttons (name shown, Sleeper id used). Add more rows as needed.
+ * Human League stays on the signed-in member path, not this list.
+ */
+export const GUEST_BROWSE_LEAGUES = [
+  { id: '1389574148908384256', name: 'The Blakeless League' },
+];
+
+export function isAllowedGuestLeagueId(rawId) {
+  const id = String(rawId || '').trim();
+  if (!/^\d{6,}$/.test(id)) return false;
+  return GUEST_BROWSE_LEAGUES.some((league) => String(league.id).trim() === id);
 }
 
 /** Human League roster/draft shape — used for keeper cost vs consensus view on Rankings. */

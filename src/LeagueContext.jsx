@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { canAccessGuestBrowse, config } from './config.js';
+import { canAccessGuestBrowse, config, isAllowedGuestLeagueId } from './config.js';
 import { useAuth } from './AuthContext.jsx';
 import { fetchLeague } from './lib/sleeper.js';
 
@@ -69,6 +69,9 @@ export function LeagueProvider({ children }) {
       if (!leagueId) {
         throw new Error('Enter a valid Sleeper league ID (digits only, or paste the league URL).');
       }
+      if (!isAllowedGuestLeagueId(leagueId)) {
+        throw new Error('That league is not on the allowed browse list.');
+      }
       const league = await fetchLeague(leagueId);
       if (!league || league.league_id == null) {
         throw new Error('That league was not found on Sleeper.');
@@ -105,10 +108,10 @@ export function LeagueProvider({ children }) {
     setGuest(null);
   }, []);
 
-  // Drop stale guest storage for anyone who cannot use browse mode.
+  // Drop stale guest storage for anyone who cannot use browse mode, or a league we no longer allow.
   useEffect(() => {
     if (!ready) return;
-    if (guest && !guestBrowseAllowed) {
+    if (guest && (!guestBrowseAllowed || !isAllowedGuestLeagueId(guest.leagueId))) {
       writeStoredGuest(null);
       setGuest(null);
     }
