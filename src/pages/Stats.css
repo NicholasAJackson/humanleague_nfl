@@ -1,3 +1,52 @@
+.career-table th.career-th--sortable {
+  padding: 0;
+  vertical-align: bottom;
+}
+
+.career-th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 12px;
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.career-th-sort:hover {
+  color: var(--color-text);
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.career-th-sort:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.55);
+  outline-offset: -2px;
+}
+
+.career-sort-flag {
+  flex-shrink: 0;
+  font-size: 10px;
+  opacity: 0.4;
+  font-weight: 700;
+}
+
+.career-th-sort--active .career-sort-flag {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
 .insights-toolbar {
   display: flex;
   align-items: center;

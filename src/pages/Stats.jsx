@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLeague } from '../LeagueContext.jsx';
 import { fetchLeagueHistoryBundles } from '../lib/sleeper.js';
-import { computeStats, computeCareerByUser } from '../lib/stats.js';
+import { computeStats, computeCareerByUser, compareCareerRows } from '../lib/stats.js';
 import {
   collectAllOwnersFromBundles,
   computeHeadToHeadRecords,
@@ -526,31 +526,110 @@ function PlayoffSection({ playoff, season }) {
   );
 }
 
-function CareerTable({ career, seasonCount }) {
+const CAREER_DEFAULT_SORT = { key: 'record', dir: 'desc' };
+
+const CAREER_SORT_FIRST_DIR = {
+  manager: 'asc',
+  titles: 'desc',
+  record: 'desc',
+  pf: 'desc',
+  pa: 'desc',
+  avg: 'desc',
+  best: 'desc',
+  worst: 'desc',
+  bench: 'desc',
+  seasons: 'desc',
+};
+
+function CareerSortTh({ sortKey, sortState, onSort, title, children }) {
+  const active = sortState?.key === sortKey;
+  const dir = active ? sortState.dir : null;
+  return (
+    <th
+      className="career-th--sortable"
+      title={title}
+      scope="col"
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        className={'career-th-sort' + (active ? ' career-th-sort--active' : '')}
+        onClick={() => onSort(sortKey)}
+      >
+        <span>{children}</span>
+        <span className="career-sort-flag" aria-hidden>
+          {active ? (dir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+function CareerTable({ career }) {
   const { rows, latestChampionUserId } = career;
+  const [sort, setSort] = useState(CAREER_DEFAULT_SORT);
+  const sortedRows = useMemo(() => {
+    const list = [...rows];
+    list.sort((a, b) => compareCareerRows(a, b, sort.key, sort.dir));
+    return list;
+  }, [rows, sort]);
+
+  function onSort(key) {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: CAREER_SORT_FIRST_DIR[key] || 'desc' },
+    );
+  }
+
   if (!rows.length) {
     return <p className="muted">No manager rows could be built from the loaded seasons.</p>;
   }
   return (
     <div className="scroll-x">
-      <table>
+      <table className="career-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Manager</th>
-              <th title="Championships won across linked seasons">Titles</th>
-              <th>W-L-T</th>
-              <th>Career PF</th>
-              <th>Career PA</th>
-              <th>Avg / game</th>
-              <th>Best week</th>
-              <th>Worst week</th>
-              <th>Bench pts</th>
-              <th>Seasons</th>
+              <CareerSortTh sortKey="manager" sortState={sort} onSort={onSort} title="Sort by manager">
+                Manager
+              </CareerSortTh>
+              <CareerSortTh
+                sortKey="titles"
+                sortState={sort}
+                onSort={onSort}
+                title="Championships won across linked seasons"
+              >
+                Titles
+              </CareerSortTh>
+              <CareerSortTh sortKey="record" sortState={sort} onSort={onSort} title="Sort by wins, then losses">
+                W-L-T
+              </CareerSortTh>
+              <CareerSortTh sortKey="pf" sortState={sort} onSort={onSort} title="Sort by career points for">
+                Career PF
+              </CareerSortTh>
+              <CareerSortTh sortKey="pa" sortState={sort} onSort={onSort} title="Sort by career points against">
+                Career PA
+              </CareerSortTh>
+              <CareerSortTh sortKey="avg" sortState={sort} onSort={onSort} title="Sort by points per game">
+                Avg / game
+              </CareerSortTh>
+              <CareerSortTh sortKey="best" sortState={sort} onSort={onSort} title="Sort by best week">
+                Best week
+              </CareerSortTh>
+              <CareerSortTh sortKey="worst" sortState={sort} onSort={onSort} title="Sort by worst week">
+                Worst week
+              </CareerSortTh>
+              <CareerSortTh sortKey="bench" sortState={sort} onSort={onSort} title="Sort by bench points">
+                Bench pts
+              </CareerSortTh>
+              <CareerSortTh sortKey="seasons" sortState={sort} onSort={onSort} title="Sort by seasons played">
+                Seasons
+              </CareerSortTh>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
+            {sortedRows.map((r, i) => {
               const isReigning = !!latestChampionUserId && r.userId === latestChampionUserId;
               return (
               <tr key={r.userId}>

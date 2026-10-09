@@ -515,6 +515,79 @@ function formatSeasonRange(seasonSet) {
   return `${nums[0]}–${nums[nums.length - 1]} (${nums.length} seasons)`;
 }
 
+function cmpNum(a, b) {
+  return (Number(a) || 0) - (Number(b) || 0);
+}
+
+/** Null/missing numeric values always sort last, regardless of direction. */
+function cmpNullableNum(a, b, sign) {
+  const aN = a == null || !Number.isFinite(Number(a));
+  const bN = b == null || !Number.isFinite(Number(b));
+  if (aN && bN) return 0;
+  if (aN) return 1;
+  if (bN) return -1;
+  return (Number(a) - Number(b)) * sign;
+}
+
+function cmpName(a, b) {
+  return String(a.displayName || '').localeCompare(String(b.displayName || ''), undefined, {
+    sensitivity: 'base',
+  });
+}
+
+/**
+ * Sort all-time career rows. `dir` is `'asc'` | `'desc'`.
+ * Record order matches default standings: wins, then fewer losses, then PF.
+ */
+export function compareCareerRows(a, b, key, dir) {
+  const sign = dir === 'asc' ? 1 : -1;
+  let c = 0;
+  switch (key) {
+    case 'manager':
+      c = cmpName(a, b);
+      break;
+    case 'titles':
+      c = cmpNum(a.championships, b.championships);
+      break;
+    case 'record':
+      c =
+        cmpNum(a.wins, b.wins) ||
+        cmpNum(b.losses, a.losses) ||
+        cmpNum(a.ties, b.ties) ||
+        cmpNum(a.careerPf, b.careerPf);
+      break;
+    case 'pf':
+      c = cmpNum(a.careerPf, b.careerPf);
+      break;
+    case 'pa':
+      c = cmpNum(a.careerPa, b.careerPa);
+      break;
+    case 'avg':
+      c = cmpNum(a.avgPtsPerGame, b.avgPtsPerGame);
+      break;
+    case 'best':
+      return (
+        cmpNullableNum(a.bestWeek?.points, b.bestWeek?.points, sign) ||
+        cmpName(a, b)
+      );
+    case 'worst':
+      return (
+        cmpNullableNum(a.worstWeek?.points, b.worstWeek?.points, sign) ||
+        cmpName(a, b)
+      );
+    case 'bench':
+      c = cmpNum(a.benchTotal, b.benchTotal);
+      break;
+    case 'seasons':
+      c = cmpNum(a.seasonsPlayed, b.seasonsPlayed);
+      break;
+    default:
+      c = 0;
+  }
+  if (c !== 0) return c * sign;
+  return cmpName(a, b) || String(a.userId || '').localeCompare(String(b.userId || ''));
+}
+
 /**
  * Merges per-season computeStats() outputs by Sleeper user_id (roster owner).
  * seasonStats: [{ season, leagueId, name?, stats }, ...] (any order).
@@ -631,12 +704,7 @@ export function computeCareerByUser(seasonStats) {
         worstWeek: u.worstWeek,
       };
     })
-    .sort(
-      (a, b) =>
-        b.wins - a.wins ||
-        a.losses - b.losses ||
-        b.careerPf - a.careerPf
-    );
+    .sort((a, b) => compareCareerRows(a, b, 'record', 'desc'));
 
   return { rows, seasons, latestChampionUserId };
 }
