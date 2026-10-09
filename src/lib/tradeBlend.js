@@ -1,18 +1,18 @@
 /**
- * In-season trade blend: ROS projection (heavy) + recent scoring (modest) +
- * draft ADP that fades as completed weeks pile up.
+ * In-season trade blend: ROS projection (heavy) + recent scoring (modest).
+ * Draft ADP is stored for display only — it is not mixed into value.
  */
 
 import { ecrToTradeValue, TRADE_VALUE_DEFAULTS } from './tradeValue.js';
 
 export const TRADE_BLEND_DEFAULTS = {
   recentWeeksMax: 3,
-  /** Mix at 0 completed weeks (proj vs ADP only). */
-  preseason: { proj: 0.45, recent: 0, adp: 0.55 },
+  /** Mix at 0 completed weeks (projection only until games land). */
+  preseason: { proj: 1, recent: 0, adp: 0 },
   /** Mix once `recentWeeksMax` weeks are in the books. */
-  inSeason: { proj: 0.55, recent: 0.3, adp: 0.15 },
-  adpFloor: 0.06,
-  /** Extra fade applied to ADP after the in-season mix is reached. */
+  inSeason: { proj: 0.65, recent: 0.35, adp: 0 },
+  adpFloor: 0,
+  /** Extra fade applied to ADP after the in-season mix is reached (unused while ADP weight is 0). */
   adpFadeAfter: 0.9,
   /** Week counts as scored when this fraction of games are complete. */
   minCompleteFrac: 0.75,
@@ -273,7 +273,7 @@ export function blendTradePlayers(players, ctx = {}) {
       games,
     );
     const adp = hasAdp(raw.adp) ? Number(raw.adp) : null;
-    if (ptsRos == null && recent == null && adp == null) continue;
+    if (ptsRos == null && recent == null) continue;
     enriched.push({
       ...raw,
       sleeper_id: id,

@@ -36,7 +36,7 @@ function slotForPlayer(bySlot, playerId) {
 
 /**
  * Map a Sleeper id onto a valued player for lineup math.
- * Prefers in-season blend rows; falls back to NFL lookup with value 0.
+ * Prefers FantasyCalc rows; falls back to NFL lookup with value 0.
  */
 export function valuedPlayerFromSources(id, blendById, lookup) {
   const sid = String(id);
@@ -85,7 +85,7 @@ function scoreAdd(rosterPlayers, fa, before, needs) {
 /**
  * Top waiver targets per position for a roster.
  * Always returns up to {@link DEFAULTS.maxPerPos} free agents per skill position
- * (by in-season value), plus a FLEX bucket of top RB/WR adds ranked by lineup upgrade.
+ * (by FantasyCalc value), plus a FLEX bucket of top RB/WR adds ranked by lineup upgrade.
  *
  * @param {object} args
  * @param {object[]} args.rosterPlayers — valued players currently on the team

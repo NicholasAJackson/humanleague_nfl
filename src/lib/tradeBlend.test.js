@@ -12,35 +12,34 @@ import {
 } from './tradeBlend.js';
 
 describe('blendWeights', () => {
-  it('is ADP-heavy before any games', () => {
+  it('is projection-only before any games', () => {
     const w = blendWeights(0);
     assert.equal(w.completedWeeks, 0);
+    assert.equal(w.proj, 1);
     assert.equal(w.recent, 0);
-    assert.ok(w.adp > w.proj);
-    assert.ok(Math.abs(w.proj + w.recent + w.adp - 1) < 1e-6);
+    assert.equal(w.adp, 0);
   });
 
   it('ramps to the in-season mix at 3 completed weeks', () => {
     const w = blendWeights(3);
-    assert.equal(w.proj, 0.55);
-    assert.equal(w.recent, 0.3);
-    assert.equal(w.adp, 0.15);
+    assert.equal(w.proj, 0.65);
+    assert.equal(w.recent, 0.35);
+    assert.equal(w.adp, 0);
   });
 
-  it('keeps ROS heaviest at two scored weeks', () => {
+  it('keeps ROS heaviest at two scored weeks and ADP at zero', () => {
     const w = blendWeights(2);
-    assert.ok(w.proj > w.adp);
     assert.ok(w.proj > w.recent);
-    assert.ok(w.adp > w.recent);
+    assert.equal(w.adp, 0);
+    assert.ok(Math.abs(w.proj + w.recent + w.adp - 1) < 1e-6);
   });
 
-  it('fades ADP after week 3 and gives the leftover to ROS', () => {
+  it('stays on the in-season mix after week 3 with no ADP', () => {
     const w3 = blendWeights(3);
     const w8 = blendWeights(8);
-    assert.ok(w8.adp < w3.adp);
-    assert.ok(w8.adp >= 0.06);
-    assert.equal(w8.recent, 0.3);
-    assert.ok(w8.proj > w3.proj);
+    assert.equal(w8.adp, 0);
+    assert.equal(w8.recent, w3.recent);
+    assert.equal(w8.proj, w3.proj);
   });
 });
 

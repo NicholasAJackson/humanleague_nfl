@@ -11,12 +11,13 @@ import {
   rosterPlayerIds,
 } from '../lib/sleeper.js';
 import { rosterPlayerIdSet } from '../lib/keeperRankings.js';
-import { formatWeightSummary } from '../lib/tradeBlend.js';
+import { fmtTradeDelta, fmtTradeValue } from '../lib/tradeValue.js';
 import {
   findWaiverTargets,
   valuedPlayerFromSources,
   WAIVER_POS_ORDER,
 } from '../lib/waiverUpgrades.js';
+import FantasyCalcAttribution from '../components/FantasyCalcAttribution.jsx';
 import './Targets.css';
 
 function managerOptions(users) {
@@ -48,10 +49,7 @@ async function loadSeasonForOwner(chain, ownerId) {
 }
 
 function fmtUpgrade(n) {
-  if (n == null || !Number.isFinite(n)) return '—';
-  const v = Number(n);
-  const sign = v > 0 ? '+' : '';
-  return `${sign}${v.toFixed(1)}`;
+  return fmtTradeDelta(n);
 }
 
 function posHeading(pos) {
@@ -211,10 +209,6 @@ export default function Targets() {
     return findWaiverTargets({ rosterPlayers, freeAgents });
   }, [blend, rosterState, lookup]);
 
-  const weightLine =
-    blend.status === 'ready' && blend.data?.weights
-      ? formatWeightSummary(blend.data.weights, (blend.data.recent_weeks || []).length)
-      : '';
 
   function onPickTeam(e) {
     const id = e.target.value;
@@ -278,10 +272,10 @@ export default function Targets() {
         <h1>Target</h1>
         <p className="muted targets-lead">
           Top 3 free agents at every position for your roster, plus FLEX targets (RB / WR), ranked on
-          the same in-season trade blend as the Trade analyzer.
-          {weightLine ? ` ${weightLine}.` : ''}
+          the same FantasyCalc redraft values as the Trade analyzer.
           {guestLeagueName ? ` · ${guestLeagueName}` : ''}
         </p>
+        <FantasyCalcAttribution extra="Kickers and DST are not in this list." />
       </header>
 
       <div className="targets-toolbar card">
@@ -382,7 +376,7 @@ export default function Targets() {
                 </h2>
                 {rows.length === 0 ? (
                   <p className="muted" style={{ margin: 0 }}>
-                    No unowned {pos === 'FLEX' ? 'RB/WR' : pos} players on the rankings blend.
+                    No unowned {pos === 'FLEX' ? 'RB/WR' : pos} players on the FantasyCalc list.
                   </p>
                 ) : (
                   <div className="targets-table-scroll">
@@ -415,7 +409,7 @@ export default function Targets() {
                                 </span>
                               </td>
                               <td>{u.slot}</td>
-                              <td>{Number.isFinite(u.value) ? u.value.toFixed(1) : '—'}</td>
+                              <td>{fmtTradeValue(u.value)}</td>
                               <td
                                 className={
                                   'targets-delta' +

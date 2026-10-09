@@ -13,6 +13,7 @@ import {
 } from '../lib/sleeper.js';
 import { computeStats, getRegularSeasonMatchupPairs } from '../lib/stats.js';
 import { loadKeeperRankingsContext } from '../lib/loadKeeperRankingsContext.js';
+import FantasyCalcAttribution from '../components/FantasyCalcAttribution.jsx';
 import './MyTeam.css';
 
 function fmtNominationRow(n, lookup) {
@@ -919,11 +920,13 @@ export default function MyTeam() {
       <section className="card my-team-waivers-card">
         <h2>Waiver targets</h2>
         <p className="muted my-team-roster-hint">
-          Top 3 free agents at every position (including FLEX RB/WR) live on the Target page.
+          Top 3 free agents at every position (including FLEX RB/WR) live on the Target page, using
+          the same FantasyCalc values as the Trade analyzer.
         </p>
         <p className="my-team-waivers-link">
           <Link to="/targets">Open Target →</Link>
         </p>
+        <FantasyCalcAttribution />
       </section>
 
       <PlayerRankingsSheet

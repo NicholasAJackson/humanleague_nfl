@@ -4,7 +4,7 @@ import { extraAtPosition, positionIsWeak, rosterStarterNeeds } from './rosterNee
 import { findTradeSuggestions } from './tradeFinder.js';
 
 function p(id, name, pos, value) {
-  return { sleeper_id: String(id), name, pos, value };
+  return { sleeper_id: String(id), name, pos, value: Number(value) * 100 };
 }
 
 function youThinAtRb() {

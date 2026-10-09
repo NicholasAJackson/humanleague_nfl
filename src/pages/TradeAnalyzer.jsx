@@ -7,8 +7,15 @@ import {
   fetchSeasonBundle,
   rosterPlayerIds,
 } from '../lib/sleeper.js';
-import { analyzeTrade, playerTradeValue, ecrToTradeValue, TRADE_VALUE_DEFAULTS } from '../lib/tradeValue.js';
-import { formatWeightSummary } from '../lib/tradeBlend.js';
+import {
+  analyzeTrade,
+  playerTradeValue,
+  ecrToTradeValue,
+  TRADE_VALUE_DEFAULTS,
+  fmtTradeValue,
+  fmtTradeDelta,
+} from '../lib/tradeValue.js';
+import FantasyCalcAttribution from '../components/FantasyCalcAttribution.jsx';
 import {
   needHoleLabels,
   rosterStarterNeeds,
@@ -62,28 +69,21 @@ function toTradePlayer(p) {
     recent_games: Number.isFinite(Number(p.recent_games)) ? Number(p.recent_games) : null,
     injury_status: String(p.injury_status || '').trim() || null,
     bye: Number.isFinite(Number(p.bye)) ? Number(p.bye) : null,
+    trend_30d: Number.isFinite(Number(p.trend_30d)) ? Number(p.trend_30d) : null,
     sleeper_id: p.sleeper_id || null,
     fp_id: p.fp_id || null,
   };
-}
-
-function fmtPts(n, digits = 1) {
-  if (n == null || !Number.isFinite(Number(n))) return null;
-  return Number(n).toFixed(digits);
 }
 
 function playerSignals(p) {
   const bits = [];
   if (p.pos) bits.push(p.pos);
   if (p.team) bits.push(p.team);
-  const ros = fmtPts(p.pts_ros, 0);
-  if (ros) bits.push(`ROS ${ros}`);
-  const recent = fmtPts(p.pts_recent, 1);
-  if (recent) {
-    const games = Number(p.recent_games);
-    bits.push(Number.isFinite(games) && games > 0 ? `${games}w ${recent}` : `form ${recent}`);
+  if (p.ecr != null) bits.push(`#${p.ecr}`);
+  if (p.trend_30d != null && p.trend_30d !== 0) {
+    const t = Number(p.trend_30d);
+    bits.push(`30d ${t > 0 ? '+' : ''}${Math.round(t)}`);
   }
-  if (p.adp != null) bits.push(`ADP ${Number(p.adp).toFixed(1)}`);
   if (p.injury_status) bits.push(p.injury_status);
   if (p.bye != null) bits.push(`Bye ${p.bye}`);
   return bits.join(' · ');
@@ -101,10 +101,7 @@ function managerOptions(users) {
 }
 
 function fmtUpgrade(n) {
-  if (n == null || !Number.isFinite(n)) return '—';
-  const v = Number(n);
-  const sign = v > 0 ? '+' : '';
-  return `${sign}${v.toFixed(1)}`;
+  return fmtTradeDelta(n);
 }
 
 /** Prefer the newest linked season that still has rostered players. */
@@ -150,7 +147,7 @@ function SidePanel({
         </h2>
         <div className="trade-side__total" aria-live="polite">
           <span className="trade-side__total-label">Value</span>
-          <strong>{total.toFixed(1)}</strong>
+          <strong>{fmtTradeValue(total)}</strong>
         </div>
       </header>
 
@@ -177,7 +174,7 @@ function SidePanel({
           </option>
           {options.map((p) => {
             const key = playerKey(p);
-            const val = playerTradeValue(p).toFixed(1);
+            const val = fmtTradeValue(playerTradeValue(p));
             const meta = [p.pos, p.team, val].filter(Boolean).join(' · ');
             return (
               <option key={key} value={key}>
@@ -199,9 +196,9 @@ function SidePanel({
           >
             <div className="trade-player__main">
               <span className="trade-player__name">{p.name}</span>
-              <span className="trade-player__meta">{playerSignals(p) || 'No in-season signals'}</span>
+              <span className="trade-player__meta">{playerSignals(p) || 'FantasyCalc'}</span>
             </div>
-            <span className="trade-player__val">{playerTradeValue(p).toFixed(1)}</span>
+            <span className="trade-player__val">{fmtTradeValue(playerTradeValue(p))}</span>
             <button
               type="button"
               className="trade-player__remove"
@@ -490,14 +487,12 @@ export default function TradeAnalyzer() {
   return (
     <div className="page trade-page">
       <header className="page-header">
-        <p className="eyebrow">Half-PPR · in-season blend</p>
+        <p className="eyebrow">Half-PPR · FantasyCalc redraft</p>
         <h1>Trade analyzer</h1>
         {rankings.status === 'ready' && (
           <p className="trade-source">
-            {rankings.data.season ? <>Sleeper {rankings.data.season} Half-PPR</> : 'Sleeper Half-PPR'}
-            {rankings.data.weights
-              ? ` · ${formatWeightSummary(rankings.data.weights, (rankings.data.recent_weeks || []).length)}`
-              : null}
+            {rankings.data.num_teams || 10}-team · {rankings.data.num_qbs || 1}QB ·{' '}
+            {rankings.data.ppr === 0.5 ? 'Half-PPR' : `${rankings.data.ppr ?? 0.5} PPR`}
             {rankings.data.scrape_date ? (
               <>
                 {' '}
@@ -509,6 +504,7 @@ export default function TradeAnalyzer() {
               : null}
           </p>
         )}
+        <FantasyCalcAttribution extra="Kickers and DST are not in this list." />
       </header>
 
       <details className="trade-help">
@@ -536,25 +532,28 @@ export default function TradeAnalyzer() {
         <div className="trade-help__body">
           <ol className="trade-help__steps">
             <li>
-              <strong>Player value</strong> — each player is scored from a blend of remaining
-              Half-PPR projection (season total minus points already scored), recent per-game
-              scoring (last 1–3 finished weeks), and draft ADP. ADP starts useful and fades as
-              more weeks land; missing signals are dropped and the rest is renormalized.
+              <strong>Player value</strong> — each player uses{' '}
+              <a href="https://fantasycalc.com" target="_blank" rel="noopener noreferrer">
+                FantasyCalc
+              </a>{' '}
+              redraft trade value for this league format (10-team, 1QB, Half-PPR). Those numbers come
+              from real public-league trades, recency-weighted, not from draft ADP or projections.
             </li>
             <li>
               <strong>Fair deal?</strong> — we add up both sides. If the totals are close, it&apos;s
-              Fair; a bit off is a Slight edge; way off is Lopsided. Uneven player counts get a small
-              boost on the thinner side.
+              Fair; a bit off is a Slight edge; way off is Lopsided. Uneven player counts get a
+              FantasyCalc-style bench/waiver boost on the thinner side.
             </li>
             <li>
               <strong>Starter upgrade</strong> — we rebuild each team&apos;s best lineup (QB, RBs,
-              WRs, TE, FLEX, DST) before and after the trade using those blended values. Green means
-              your starters got better.
+              WRs, TE, FLEX, DST) before and after the trade using those values. Green means
+              your starters got better. DST has no FantasyCalc value, so that slot doesn&apos;t move
+              the upgrade math.
             </li>
             <li>
               <strong>Trade finder</strong> — scans simple swaps across the league and keeps deals
-              that look fair on blended value <em>and</em> help at least one starting lineup. If you
-              pick a position you want, it only hits teams that can spare one and never suggests a
+              that look fair on FantasyCalc value <em>and</em> help at least one starting lineup. If
+              you pick a position you want, it only hits teams that can spare one and never suggests a
               same-position swap.
             </li>
           </ol>
@@ -608,7 +607,7 @@ export default function TradeAnalyzer() {
                   {labelA} starter holes: <strong>{needsPreview.join(', ')}</strong>
                 </p>
               ) : managerA ? (
-                <p className="muted trade-teams__needs">{labelA} starters look filled on blended depth.</p>
+                <p className="muted trade-teams__needs">{labelA} starters look filled on FantasyCalc depth.</p>
               ) : null}
             </div>
           )}
@@ -669,7 +668,7 @@ export default function TradeAnalyzer() {
               <div className="trade-verdict__scores">
                 <div className={fair.winner === 'a' ? 'is-winner' : undefined}>
                   <span>{labelA} gets</span>
-                  <strong>{analysis.totalA.toFixed(1)}</strong>
+                  <strong>{fmtTradeValue(analysis.totalA)}</strong>
                   {sideA.length > 0 && (
                     <p className="trade-verdict__players">
                       {sideA.map((p) => p.name).join(', ')}
@@ -679,7 +678,7 @@ export default function TradeAnalyzer() {
                 <div className="trade-verdict__vs">vs</div>
                 <div className={fair.winner === 'b' ? 'is-winner' : undefined}>
                   <span>{labelB} gets</span>
-                  <strong>{analysis.totalB.toFixed(1)}</strong>
+                  <strong>{fmtTradeValue(analysis.totalB)}</strong>
                   {sideB.length > 0 && (
                     <p className="trade-verdict__players">
                       {sideB.map((p) => p.name).join(', ')}
@@ -696,14 +695,14 @@ export default function TradeAnalyzer() {
                       <span>{labelA}</span>
                       <strong>{fmtUpgrade(rosterImpact.a.upgrade)}</strong>
                       <em>
-                        {rosterImpact.a.beforeTotal.toFixed(1)} → {rosterImpact.a.afterTotal.toFixed(1)}
+                        {fmtTradeValue(rosterImpact.a.beforeTotal)} → {fmtTradeValue(rosterImpact.a.afterTotal)}
                       </em>
                     </div>
                     <div className={upgradeClass(rosterImpact.b.upgrade)}>
                       <span>{labelB}</span>
                       <strong>{fmtUpgrade(rosterImpact.b.upgrade)}</strong>
                       <em>
-                        {rosterImpact.b.beforeTotal.toFixed(1)} → {rosterImpact.b.afterTotal.toFixed(1)}
+                        {fmtTradeValue(rosterImpact.b.beforeTotal)} → {fmtTradeValue(rosterImpact.b.afterTotal)}
                       </em>
                     </div>
                   </div>
@@ -827,7 +826,7 @@ export default function TradeAnalyzer() {
                   </h2>
                   <p className="muted trade-finder__sub">
                     Pick a player you&apos;re willing to move and the position you need (e.g. RB after
-                    an injury). Scans 1-for-1 through 2-for-2 and 3-for-1 packages for fair blended-value
+                    an injury). Scans 1-for-1 through 2-for-2 and 3-for-1 packages for fair FantasyCalc
                     deals that improve starters. Extra pieces are added around your offer when needed
                     to balance value.
                   </p>
@@ -866,7 +865,7 @@ export default function TradeAnalyzer() {
                     <option value={NONE}>Any / auto-pick sends</option>
                     {finderOfferOptions.map((p) => (
                       <option key={playerKey(p)} value={String(p.sleeper_id)}>
-                        {p.name} ({p.pos || '?'}) · {playerTradeValue(p).toFixed(1)}
+                        {p.name} ({p.pos || '?'}) · {fmtTradeValue(playerTradeValue(p))}
                       </option>
                     ))}
                   </select>

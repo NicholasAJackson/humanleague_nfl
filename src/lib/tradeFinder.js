@@ -15,10 +15,10 @@ const DEFAULTS = {
   maxResults: 16,
   /** Allow slight chart edge; reject lopsided. */
   maxFairBand: 'slight',
-  /** Reject if either side's starter upgrade is worse than this. */
-  minUpgrade: -3,
-  /** At least one side should gain this much starter value. */
-  minBestUpgrade: 0.35,
+  /** Reject if either side's starter upgrade is worse than this (FantasyCalc scale). */
+  minUpgrade: -300,
+  /** At least one side should gain this much starter value (FantasyCalc scale). */
+  minBestUpgrade: 35,
   packageAdjust: true,
   /**
    * When set (QB/RB/WR/TE/DST), only suggest deals where you receive that position.

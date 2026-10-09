@@ -1,7 +1,7 @@
 /**
  * Trade values for the analyzer.
  *
- * Preferred path: precomputed `player.value` (in-season blend of ROS / recent / ADP).
+ * Preferred path: precomputed `player.value` (FantasyCalc redraft trade value).
  * Otherwise `ecr` is converted with exponential rank decay.
  */
 
@@ -11,12 +11,30 @@ export const TRADE_VALUE_DEFAULTS = {
   decay: 0.985,
   /** Cap ranked pool; ranks beyond this are ~0. */
   maxRank: 250,
-  /** Bonus per extra asset on the thicker side, applied to the thinner side. */
-  packageBonusPerExtra: 4,
+  /**
+   * Bonus per extra asset on the thicker side, applied to the thinner side.
+   * FantasyCalc uses ~425 for a dynasty waiver/bench spot on 2-for-1s; redraft
+   * values are the same integer scale so we match that adjustment.
+   */
+  packageBonusPerExtra: 425,
   /** Gap % thresholds vs the higher side total. */
   fairPct: 8,
   slightPct: 20,
 };
+
+export function fmtTradeValue(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  const v = Number(n);
+  const digits = Math.abs(v) >= 100 ? 0 : 1;
+  return v.toFixed(digits);
+}
+
+export function fmtTradeDelta(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  const v = Number(n);
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${fmtTradeValue(v)}`;
+}
 
 /**
  * @param {number} ecr Overall ADP / ECR rank (1 = best)
@@ -124,7 +142,7 @@ export function evaluateTradeFairness(totalA, totalB, opts = {}) {
     label = 'Fair';
     summary =
       winner === 'even'
-        ? 'Both sides line up on blended trade value.'
+        ? 'Both sides line up on FantasyCalc trade value.'
         : `Close enough — ${sideName} edges it by ${gapPct}%.`;
   } else if (band === 'slight') {
     label = 'Slight edge';

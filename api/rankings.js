@@ -10,7 +10,7 @@ const ECR_PAGE_TYPES = new Set(['redraft-overall']);
 const FP_PAGE_TYPES = new Set(['fp-ecr-half']);
 const SLEEPER_ADP_PAGE_TYPES = new Set(['sleeper-adp-half']);
 const SLEEPER_PROJ_PAGE_TYPES = new Set(['sleeper-proj-half']);
-const SLEEPER_TRADE_BLEND_PAGE_TYPES = new Set(['sleeper-trade-blend']);
+const SLEEPER_TRADE_BLEND_PAGE_TYPES = new Set(['sleeper-trade-blend', 'fantasycalc-redraft']);
 
 const ALLOWED_PAGE_TYPES = new Set([
   ...ECR_PAGE_TYPES,
@@ -707,7 +707,7 @@ export default async function handler(req, res) {
 
     if (SLEEPER_TRADE_BLEND_PAGE_TYPES.has(pageType)) {
       const payload = await getTradeValuesPayload();
-      res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=21600');
+      res.setHeader('Cache-Control', 'public, s-maxage=10800, stale-while-revalidate=86400');
       res.status(200);
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.send(JSON.stringify(payload));

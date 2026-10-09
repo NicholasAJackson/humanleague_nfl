@@ -1,0 +1,15 @@
+.fc-attr {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-dim);
+  line-height: 1.45;
+  max-width: 42rem;
+}
+
+.fc-attr a {
+  font-weight: 600;
+}
+
+.fc-attr a:hover {
+  text-decoration: underline;
+}

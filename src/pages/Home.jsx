@@ -6,6 +6,7 @@ import { useLeague } from '../LeagueContext.jsx';
 import { fetchLeague, fetchUsers } from '../lib/sleeper.js';
 import { fetchHallOfFame } from '../lib/hallOfFame.js';
 import NflMatchups from '../components/NflMatchups.jsx';
+import FantasyCalcAttribution from '../components/FantasyCalcAttribution.jsx';
 import './Home.css';
 
 function splitCountdown(msRemaining) {
@@ -234,11 +235,12 @@ export default function Home() {
               to="/trades"
               icon={TradeIcon}
               title="Trade analyzer"
-              body="Compare sides using in-season value and current rosters."
+              body="Compare sides using FantasyCalc redraft values and current rosters."
             />
           </>
         )}
       </div>
+      <FantasyCalcAttribution />
     </div>
   );
 }
